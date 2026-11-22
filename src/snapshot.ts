@@ -12,19 +12,20 @@ export interface TSnapshotObject {
 
 /** Манифест снапшота (sha256 + таймстамп). */
 export interface TSnapshotManifest {
-  iteration: number;
+  iteration: number | string;
   capturedAt: string;
   objects: { objPath: string; file: string; sha256: string }[];
 }
 
 /**
- * Снять снапшот определений после CODE/FIX: пишет `<taskDir>/snapshots/<n>/<objPath>.sql`
+ * Снять снапшот определений: пишет `<taskDir>/snapshots/<n|baseline>/<objPath>.sql`
  * и `manifest.json` (sha256 каждого файла + таймстамп). Снапшот read-only, снимает движок;
- * определения получает MCP-агент (движок сам в БД не ходит — получает готовый текст).
+ * определения получает вызывающий (движок сам в БД не ходит — получает готовый текст).
+ * `iteration` — номер итерации (`1`, `2`, …) или `'baseline'` для снимка «до всех изменений».
  */
 export async function captureSnapshot(
   taskDir: string,
-  iteration: number,
+  iteration: number | string,
   objects: TSnapshotObject[],
 ): Promise<{ manifestPath: string; files: string[] }> {
   const dir = join(taskDir, 'snapshots', String(iteration));
