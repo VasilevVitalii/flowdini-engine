@@ -9,20 +9,24 @@ describe('reviewFixIterations', () => {
     expect(reviewFixIterations(s(''))).toBe(0);
   });
 
-  it('ISSUE без REVIEW — 0', () => {
+  it('ISSUE без FIX — 0', () => {
     expect(reviewFixIterations(s('# ISSUE 1\n\nbody\n'))).toBe(0);
   });
 
-  it('ISSUE + REVIEW — 1', () => {
-    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n'))).toBe(1);
+  it('одинокий REVIEW без FIX не считается — 0', () => {
+    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n'))).toBe(0);
   });
 
-  it('ISSUE + REVIEW + FIX + REVIEW — 2', () => {
-    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n\n# FIX 1\n\nb\n\n# REVIEW 2\n\nb\n'))).toBe(2);
+  it('ISSUE + REVIEW + FIX — 1', () => {
+    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n\n# FIX 1\n\nb\n'))).toBe(1);
+  });
+
+  it('две завершённые итерации — 2', () => {
+    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n\n# FIX 1\n\nb\n\n# REVIEW 2\n\nb\n\n# FIX 2\n\nb\n'))).toBe(2);
   });
 
   it('QUESTIONS сбрасывает счётчик', () => {
-    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n\n# QUESTIONS 1\n\nb\n\n# REVIEW 2\n\nb\n'))).toBe(1);
+    expect(reviewFixIterations(s('# ISSUE 1\n\nb\n\n# REVIEW 1\n\nb\n\n# FIX 1\n\nb\n\n# QUESTIONS 1\n\nb\n\n# FIX 2\n\nb\n'))).toBe(1);
   });
 });
 

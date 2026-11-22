@@ -50,6 +50,34 @@ fixed
 `);
     expect(openArcs(c)).toEqual([{ addr: 'FIX 1#BUG 1', from: ['AI.CODER.SENIOR'], to: ['AI.REVIEWER'] }]);
   });
+
+  it('fd-reply от не-адресата не закрывает дугу', () => {
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+body
+
+# QUESTIONS 1
+
+## Q 1
+[fd-from:: AI.ANALYST]
+[fd-to:: HUMAN.CODER]
+
+body
+
+# ANSWERS 1
+
+## A 1
+[fd-from:: HUMAN.ANALYST]
+[fd-to:: AI.ANALYST]
+[fd-reply:: [[#QUESTIONS 1#Q 1]]]
+
+body
+`);
+    // Q 1 адресована HUMAN.CODER, а ответил HUMAN.ANALYST → дуга остаётся открытой.
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 1', 'QUESTIONS 1#Q 1', 'ANSWERS 1#A 1']);
+  });
 });
 
 describe('nextStep', () => {

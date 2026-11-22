@@ -32,4 +32,13 @@ describe('captureSnapshot', () => {
     expect(a.files[0]).toContain('/snapshots/1/');
     expect(b.files[0]).toContain('/snapshots/2/');
   });
+
+  it('инъективное имя файла: разные obj-path не коллизируют', async () => {
+    const dir = await tmp();
+    const { files } = await captureSnapshot(dir, 1, [
+      { objPath: 'dbo.sp x', definition: 'A' },
+      { objPath: 'dbo.sp_x', definition: 'B' },
+    ]);
+    expect(new Set(files).size).toBe(2);
+  });
 });

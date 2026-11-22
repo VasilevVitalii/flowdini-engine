@@ -49,9 +49,10 @@ export function sections(content: TFdContent): TFdSection[] {
 }
 
 /**
- * Число непрерывных REVIEW-итераций с последнего прерывания
- * (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают счётчик). Производное состояние
- * журнала: порог — настройка SPEC, счётчик сам по себе в md не хранится.
+ * Число завершённых итераций REVIEW→FIX с последнего прерывания
+ * (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают счётчик). Итерация засчитывается по
+ * `FIX` (один на итерацию) — одинокий `REVIEW` без `FIX` счётчик не двигает.
+ * Производное состояние журнала: порог — настройка SPEC, счётчик в md не хранится.
  */
 export function reviewFixIterations(content: TFdContent): number {
   let count = 0;
@@ -62,7 +63,7 @@ export function reviewFixIterations(content: TFdContent): number {
       case 'DONE':
         count = 0;
         break;
-      case 'REVIEW':
+      case 'FIX':
         count += 1;
         break;
     }

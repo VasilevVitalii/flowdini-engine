@@ -9,7 +9,7 @@ reviewLimit: 2
 roles:
   AI.CODER:
     model: deepseek-v4-pro
-    tools: [execute_query, get_definition]
+    tools: [execute_sql, get_definition]
   AI.CODER.SENIOR:
     model: claude-sonnet
   AI.REVIEWER:
@@ -21,7 +21,7 @@ describe('parseSpec', () => {
     const c = parseSpec(YAML);
     expect(c.reviewLimit).toBe(2);
     expect(c.roles['AI.CODER'].model).toBe('deepseek-v4-pro');
-    expect(c.roles['AI.CODER'].tools).toEqual(['execute_query', 'get_definition']);
+    expect(c.roles['AI.CODER'].tools).toEqual(['execute_sql', 'get_definition']);
   });
 
   it('пустой YAML — пустые роли', () => {
@@ -63,7 +63,7 @@ describe('resolveRole', () => {
     const c = parseSpec(YAML);
     const r = resolveRole(c, 'AI.CODER.SENIOR');
     expect(r.model).toBe('claude-sonnet');
-    expect(r.tools).toEqual(['execute_query', 'get_definition']);
+    expect(r.tools).toEqual(['execute_sql', 'get_definition']);
   });
 
   it('точный FUNC без INSTANCE', () => {

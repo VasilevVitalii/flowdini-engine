@@ -30,14 +30,21 @@ export interface TFdNextStep {
  * `fd-reply` (внутри файла). Закрытие — по адресу топика (`L1#L2#L3`).
  */
 export function openArcs(content: TFdContent): TFdOpenArc[] {
-  const replied = new Set<string>();
+  // Все fd-reply: адрес → список fd-from ответивших (кто закрывает дугу).
+  const replies = new Map<string, string[]>();
   for (const item of content.itemList) {
+    const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
     for (const f of item.topic.inlineList) {
       if (f.param !== 'fd-reply') continue;
       for (const v of f.valueList) {
         for (const raw of extractLinks(v)) {
           const p = parseAddr(raw);
-          if (p !== null && p.filePath === '') replied.add(p.parts.join('#'));
+          if (p !== null && p.filePath === '') {
+            const addr = p.parts.join('#');
+            const arr = replies.get(addr) ?? [];
+            arr.push(...from);
+            replies.set(addr, arr);
+          }
         }
       }
     }
@@ -47,7 +54,11 @@ export function openArcs(content: TFdContent): TFdOpenArc[] {
     const to = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
     if (to.length === 0) continue;
     const addr = topicAddr(item.topic);
-    if (addr === '' || replied.has(addr)) continue;
+    if (addr === '') continue;
+    // Закрыта, только если ответил кто-то из адресатов (адресат покрывает ответившего).
+    const replyFrom = replies.get(addr) ?? [];
+    const answered = to.some((t) => replyFrom.some((rf) => roleCovers(t, rf)));
+    if (answered) continue;
     const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
     arcs.push({ addr, from, to });
   }

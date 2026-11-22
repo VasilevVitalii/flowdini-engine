@@ -49,7 +49,12 @@ export async function captureSnapshot(
   return { manifestPath, files };
 }
 
-/** Безопасное имя файла из obj-path (без создания подпапок). */
+/** Безопасное и инъективное имя файла из obj-path (без создания подпапок, без коллизий). */
 function safeName(objPath: string): string {
-  return objPath.replace(/[^\w.-]+/g, '_');
+  let out = '';
+  for (const ch of objPath) {
+    if (/[A-Za-z0-9._-]/.test(ch)) out += ch;
+    else out += '~' + (ch.codePointAt(0) ?? 0).toString(16).padStart(4, '0');
+  }
+  return out;
 }

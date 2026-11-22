@@ -113,7 +113,7 @@ function checkContent(
     const roles = item.topic.inlineList
       .filter((f) => f.param === 'fd-to')
       .flatMap((f) => f.valueList);
-    if (roles.length > 1 && roles.some((r) => !r.startsWith('HUMAN.'))) {
+    if (roles.length > 1 && roles.some((r) => !roleCovers('HUMAN', r))) {
       errors.push(`multiple roles awaited: "${roles.join(', ')}"`);
     }
   }
