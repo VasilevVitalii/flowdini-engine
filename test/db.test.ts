@@ -73,6 +73,14 @@ describe('validateDbObject', () => {
     ]);
   });
 
+  it('exists:null (сбой проверки) → ошибка "cannot verify", не "not found"', async () => {
+    const facts: Record<string, TFdDbFact> = { 'dbo.p_a': { exists: null, kind: null } };
+    const objects = [{ objPath: 'dbo.p_a', objKind: 'procedure', objAction: 'edit' as const }];
+    expect(await validateDbObject(objects, lookup(facts))).toEqual([
+      { objPath: 'dbo.p_a', error: 'cannot verify existence: "dbo.p_a"' },
+    ]);
+  });
+
   it('невалидный obj-kind → ошибка без обращения к БД', async () => {
     const objects = [{ objPath: 'dbo.t_a', objKind: 'table', objAction: 'edit' as const }];
     let called = false;

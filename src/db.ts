@@ -13,8 +13,8 @@ export interface TFdDbObject {
 
 /** Факт о существовании и типе объекта в БД (результат MCP-агента). */
 export interface TFdDbFact {
-  /** Объект существует в БД. */
-  exists: boolean;
+  /** Объект существует в БД (`true`), нет (`false`), не удалось проверить (`null`). */
+  exists: boolean | null;
   /** Тип объекта в БД (`procedure`/`function`/`view`/…), `null` — объекта нет. */
   kind: string | null;
 }
@@ -72,6 +72,10 @@ export async function validateDbObject(
       continue;
     }
     const fact = await lookup(obj.objPath);
+    if (fact.exists === null) {
+      errors.push({ objPath: obj.objPath, error: `cannot verify existence: "${obj.objPath}"` });
+      continue;
+    }
     if (fact.exists) {
       if (obj.objAction === 'create') {
         errors.push({ objPath: obj.objPath, error: `object already exists: "${obj.objPath}"` });
