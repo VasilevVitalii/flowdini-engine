@@ -139,3 +139,164 @@ describe('taskCheck', () => {
     expect(await taskCheck(dir)).toEqual([]);
   });
 });
+
+describe('taskCheck: терминальность DONE', () => {
+  it('DONE последним — без ошибок', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n\n# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nзакрыто\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('раздел после DONE — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# CODE 1\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'section after DONE: "CODE 1"' },
+    ]);
+  });
+
+  it('ISSUE после DONE (переоткрытие) — допустимо', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# ISSUE 2\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nreopen\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('DONE от не-HUMAN — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: AI.CODER]\n\nclosed\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'DONE fd-from must be HUMAN.*: "AI.CODER"' },
+    ]);
+  });
+
+  it('DONE с fd-to — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n[fd-to:: AI.CODER]\n\nclosed\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'DONE must not have fd-to' },
+    ]);
+  });
+});
+
+describe('taskCheck: матрица ISSUE', () => {
+  it('AI.WRITER → AI.ANALYST — допустимо', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('HUMAN.ANALYST → AI.ANALYST — допустимо', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: HUMAN.ANALYST]\n[fd-to:: AI.ANALYST]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('AI.ANALYST → AI.CODER — допустимо', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('AI.ANALYST → AI.REVIEWER — допустимо', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.REVIEWER]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('AI.WRITER → AI.CODER — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.CODER]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'invalid ISSUE transfer: "AI.WRITER" → "AI.CODER"' },
+    ]);
+  });
+
+  it('AI.ANALYST → HUMAN.CODER — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: HUMAN.CODER]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'invalid ISSUE transfer: "AI.ANALYST" → "HUMAN.CODER"' },
+    ]);
+  });
+});
+
+describe('taskCheck: валидация OBJECT', () => {
+  it('полный OBJECT — без ошибок', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('OBJECT без obj-path — ошибка полноты', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'OBJECT incomplete: missing obj-path ("OBJECT 1")' },
+    ]);
+  });
+
+  it('неверный obj-action — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: drop]\n[obj-path:: dbo.sp_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'invalid obj-action: "drop"' },
+    ]);
+  });
+
+  it('дубль obj-path — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody1\n\n## OBJECT 2\n[obj-kind:: procedure]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody2\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'duplicate obj-path: "dbo.sp_x"' },
+    ]);
+  });
+});
+
+describe('taskCheck: fd-vault', () => {
+  it('существующий файл vault — без ошибок', async () => {
+    const dir = await tmp();
+    const vault = await tmp();
+    await writeFile(join(vault, 'gi-schema.md'), '# schema\n');
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: gi-schema.md]\n\nbody\n');
+    expect(await taskCheck(dir, { vaultRoot: vault })).toEqual([]);
+  });
+
+  it('отсутствующий файл vault — ошибка', async () => {
+    const dir = await tmp();
+    const vault = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: ghost.md]\n\nbody\n');
+    expect(await taskCheck(dir, { vaultRoot: vault })).toEqual([
+      { relativeFileName: 'a.md', error: 'vault file not found: "ghost.md"' },
+    ]);
+  });
+
+  it('без vaultRoot — fd-vault не проверяется', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: ghost.md]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+});
+
+describe('taskCheck: гибридный гейт', () => {
+  it('Q первым в REVIEW — без ошибок', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# REVIEW 1\n\n## Q 1\n[fd-to:: HUMAN.CODER]\n\nпродолжать?\n\n## BUG 1\n[fd-from:: AI.REVIEWER]\n[fd-to:: AI.CODER]\n\nзамечание\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('Q не первым в REVIEW — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# REVIEW 1\n\n## BUG 1\n[fd-from:: AI.REVIEWER]\n[fd-to:: AI.CODER]\n\nзамечание\n\n## Q 1\n[fd-to:: HUMAN.CODER]\n\nпродолжать?\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'gate Q must be first in REVIEW: "Q 1"' },
+    ]);
+  });
+
+  it('Q адресован не HUMAN.CODER — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# REVIEW 1\n\n## Q 1\n[fd-to:: AI.CODER]\n\nпродолжать?\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'gate Q must be to HUMAN.CODER: "AI.CODER"' },
+    ]);
+  });
+});
