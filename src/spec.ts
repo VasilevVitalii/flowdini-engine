@@ -104,3 +104,16 @@ export function resolveRole(config: TFdSpecConfig, role: string): TFdRoleSpec {
   const overlay = parts.length > 2 ? (config.roles[role] ?? {}) : {};
   return { ...base, ...overlay };
 }
+
+/**
+ * Матрица MCP «роль → инструменты»: для каждого ключа реестра — резолвнутые
+ * `tools` (с наследованием `INSTANCE`→`FUNC`). Ключи без инструментов опускаются.
+ */
+export function mcpMatrix(config: TFdSpecConfig): Record<string, string[]> {
+  const matrix: Record<string, string[]> = {};
+  for (const role of Object.keys(config.roles)) {
+    const tools = resolveRole(config, role).tools;
+    if (tools !== undefined && tools.length > 0) matrix[role] = tools;
+  }
+  return matrix;
+}

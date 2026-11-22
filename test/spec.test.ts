@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseSpec, readSpec, resolveRole, validateSpec } from '../src/spec.js';
+import { mcpMatrix, parseSpec, readSpec, resolveRole, validateSpec } from '../src/spec.js';
 
 const YAML = `
 reviewLimit: 2
@@ -72,6 +72,21 @@ describe('resolveRole', () => {
 
   it('роли нет — пустой spec', () => {
     expect(resolveRole(parseSpec(YAML), 'AI.WRITER')).toEqual({});
+  });
+});
+
+describe('mcpMatrix', () => {
+  it('матрица роль → инструменты с наследованием INSTANCE→FUNC', () => {
+    const c = parseSpec(`roles:\n  AI.CODER:\n    tools: [execute_sql, get_definition]\n  AI.CODER.SENIOR:\n    tools: [get_definition]\n  AI.REVIEWER:\n    tools: [get_definition, list_tables]\n  HUMAN.ANALYST: {}\n`);
+    expect(mcpMatrix(c)).toEqual({
+      'AI.CODER': ['execute_sql', 'get_definition'],
+      'AI.CODER.SENIOR': ['get_definition'],
+      'AI.REVIEWER': ['get_definition', 'list_tables'],
+    });
+  });
+
+  it('роли без tools опускаются', () => {
+    expect(mcpMatrix(parseSpec('roles:\n  HUMAN.ANALYST: {}\n'))).toEqual({});
   });
 });
 

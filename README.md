@@ -110,13 +110,13 @@ roles:
     context: [vault/gi/schema.md]   # SPEC-биндинги — обязательный минимум контекста
   AI.CODER:
     model: deepseek-v4-pro
-    tools: [execute_query, get_definition]
+    tools: [execute_sql, get_definition]
     rights: { db: [procedure, function, view] }
   AI.CODER.SENIOR:      # INSTANCE перекрывает FUNC (наследование по полям)
     model: claude-sonnet-4
   AI.REVIEWER:
     model: deepseek-v4-pro
-    tools: [get_definition, describe_table, describe_view]
+    tools: [get_definition, describe_table, list_views]
     rights: { db: read }
   HUMAN.ANALYST: {}
   HUMAN.CODER: {}
@@ -141,6 +141,17 @@ API:
 - `roleBrief(spec, role, content)` — поручение роли: оси (резолв с наследованием), SPEC-биндинги `context`, `fd-vault` из адресованных `ISSUE`, открытые дуги этой роли.
 
 Цикл исполнения (вне ядра): `nextStep` → `roleBrief` → агент-роль пишет раздел → `taskCheck` → снапшот после `CODE`/`FIX` → снова `nextStep`, пока не `DONE`.
+
+### Рантайм БД (`db.ts`)
+
+Детерминированная сверка `OBJECT` с живой БД. Ядро в БД не ходит: факты существования/типа и текст определения передаёт MCP-агент (`vv-db-mcp`) через колбэки — так ядро остаётся тестируемым без сети.
+
+- `extractDbObjects(content)` — объекты из `## OBJECT`-топиков (`obj-path`/`obj-kind`/`obj-action`); неполные пропускаются (их ловит `taskCheck`).
+- `validateDbObject(objects, lookup)` — сверка против фактов БД: `obj-kind` ∈ {`procedure`,`function`,`view`}; `create` ⇒ объекта нет; `edit` ⇒ объект есть; тип в БД совпадает с `obj-kind`. Возвращает `TFdDbError[]` (`objPath` + `error`).
+- `collectSnapshot(objects, getDefinition)` — определения (`get_definition` MCP) → `TSnapshotObject[]` для `captureSnapshot`.
+- `mcpMatrix(spec)` (в `spec.ts`) — матрица «роль → инструменты» из `roles[*].tools` с наследованием `INSTANCE`→`FUNC`; роли без `tools` опускаются.
+
+Колбэки: `TFdDbLookup = (objPath) => Promise<{ exists, kind }>`, `TFdGetDefinition = (objPath) => Promise<string>`. Адаптер к `vv-db-mcp` (stdio) — вне ядра (gi-bridge); `get_definition` отдаёт `not_found` как ошибку инструмента — адаптер трактует её как `exists: false`, прочие ошибки — как «не удалось проверить» (не «есть/нет»).
 
 ## Разработка
 
