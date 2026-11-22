@@ -94,6 +94,43 @@ const { manifestPath, files } = await captureSnapshot('/path/to/task', 2, [
 ]);
 ```
 
+### SPEC-конфиг (`spec.ts`)
+
+Декларативный контракт исполнения проекта — YAML-файл `fd.spec.yaml` (один на проект, в корне). Движок читает его и раздаёт ролям оси исполнения; сам инструменты не держит (матрица MCP — данные SPEC, не ядро).
+
+```yaml
+reviewLimit: 2          # порог итераций REVIEW→FIX; после него в REVIEW идёт ## Q к HUMAN.CODER
+
+roles:
+  AI.ANALYST:
+    model: deepseek-v4-pro
+    tools: [get_definition, describe_table]
+    rights: { db: read, vault: full }
+    budget: { tokens: 60000 }
+    context: [vault/gi/schema.md]   # SPEC-биндинги — обязательный минимум контекста
+  AI.CODER:
+    model: deepseek-v4-pro
+    tools: [execute_query, get_definition]
+    rights: { db: [procedure, function, view] }
+  AI.CODER.SENIOR:      # INSTANCE перекрывает FUNC (наследование по полям)
+    model: claude-sonnet-4
+  AI.REVIEWER:
+    model: deepseek-v4-pro
+    tools: [get_definition, describe_table, describe_view]
+    rights: { db: read }
+  HUMAN.ANALYST: {}
+  HUMAN.CODER: {}
+```
+
+API:
+
+- `parseSpec(text)` — YAML → `TFdSpecConfig` (форма полей не валидируется);
+- `readSpec(path)` — прочитать `fd.spec.yaml`;
+- `validateSpec(config)` — `TFdSpecError[]`: нотация роли (`KIND.FUNC[.INSTANCE]`, 2–3 сегмента), типы полей, `reviewLimit` (целое ≥ 0);
+- `resolveRole(config, role)` — резолв оси с наследованием: `AI.CODER.SENIOR` наследует `tools`/`rights`/`budget`/`context` от `AI.CODER` и перекрывает `model`; массивы заменяются целиком, не конкатенируются.
+
+Поля роли: `model` (модель), `tools` (матрица MCP «роль → инструменты»), `rights` (что можно: read-only, DDL-виды, vault), `budget` (лимиты), `context` (SPEC-биндинги). Все опциональны; `reviewLimit` не задан → гейт `## Q` выключен.
+
 ## Разработка
 
 ```sh
