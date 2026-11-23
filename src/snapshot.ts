@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /** Объект для снапшота: obj-path (schema.name) и его определение. */
-export interface TSnapshotObject {
+export interface TFdSnapshotObject {
   /** obj-path (schema.name) — ключ объекта, объявленный в `OBJECT`. */
   objPath: string;
   /** Текст определения (get_definition), как его вернул MCP. */
@@ -11,7 +11,7 @@ export interface TSnapshotObject {
 }
 
 /** Манифест снапшота (sha256 + таймстамп). */
-export interface TSnapshotManifest {
+export interface TFdSnapshotManifest {
   iteration: number | string;
   capturedAt: string;
   objects: { objPath: string; file: string; sha256: string }[];
@@ -26,7 +26,7 @@ export interface TSnapshotManifest {
 export async function captureSnapshot(
   taskDir: string,
   iteration: number | string,
-  objects: TSnapshotObject[],
+  objects: TFdSnapshotObject[],
   now?: string,
 ): Promise<{ manifestPath: string; files: string[] }> {
   const dir = join(taskDir, 'snapshots', String(iteration));
@@ -34,7 +34,7 @@ export async function captureSnapshot(
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
   const files: string[] = [];
-  const manifestObjects: TSnapshotManifest['objects'] = [];
+  const manifestObjects: TFdSnapshotManifest['objects'] = [];
   for (const obj of objects) {
     const file = `${safeName(obj.objPath)}.sql`;
     const sha256 = createHash('sha256').update(obj.definition).digest('hex');
@@ -44,7 +44,7 @@ export async function captureSnapshot(
     files.push(full);
     manifestObjects.push({ objPath: obj.objPath, file, sha256 });
   }
-  const manifest: TSnapshotManifest = {
+  const manifest: TFdSnapshotManifest = {
     iteration,
     capturedAt: now ?? new Date().toISOString(),
     objects: manifestObjects,

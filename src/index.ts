@@ -1,4 +1,4 @@
-export { contentPretty } from './pretty.js';
+export { contentPretty, nowStamp } from './pretty.js';
 export {
   levelText,
   topicAddr,
@@ -10,7 +10,7 @@ export {
 export type { TFdAddr, TFdIndex } from './addr.js';
 export { roleCovers } from './role.js';
 export { captureSnapshot } from './snapshot.js';
-export type { TSnapshotObject, TSnapshotManifest } from './snapshot.js';
+export type { TFdSnapshotObject, TFdSnapshotManifest } from './snapshot.js';
 export { openArcs, nextStep, gateDue, roleBrief } from './orchestrator.js';
 export type { TFdOpenArc, TFdNextStep, TFdRoleBrief } from './orchestrator.js';
 export { parseSpec, readSpec, resolveRole, validateSpec, mcpMatrix } from './spec.js';

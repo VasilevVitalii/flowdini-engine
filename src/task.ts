@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FdTaskFile, textToStructure } from 'flowdini-spec';
+import { FdTaskFile, textToStructure, stripFences } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
 import { buildIndex, extractLinks, levelText, makeResolver, parseAddr, topicAddr } from './addr.js';
 import { roleCovers } from './role.js';
@@ -254,24 +254,4 @@ async function checkVault(content: TFdContent, vaultRoot: string): Promise<strin
 /** Убрать суффикс `.md` (путь в ссылках и ключ индекса — без `.md`). */
 function stripMd(name: string): string {
   return name.endsWith('.md') ? name.slice(0, -3) : name;
-}
-
-/** Вырезать fenced-блоки (```...```), чтобы ссылки в примерах кода не проверялись. */
-function stripFences(text: string): string {
-  const lines = text.split('\n');
-  const out: string[] = [];
-  let fence: { char: string; len: number } | null = null;
-  for (const line of lines) {
-    if (fence) {
-      if (new RegExp(`^ {0,3}${fence.char}{${fence.len},}\\s*$`).test(line)) fence = null;
-      continue;
-    }
-    const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (m) {
-      fence = { char: m[1][0], len: m[1].length };
-      continue;
-    }
-    out.push(line);
-  }
-  return out.join('\n');
 }

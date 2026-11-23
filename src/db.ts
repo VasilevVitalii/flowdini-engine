@@ -1,5 +1,5 @@
 import type { TFdContent } from 'flowdini-spec';
-import type { TSnapshotObject } from './snapshot.js';
+import type { TFdSnapshotObject } from './snapshot.js';
 
 /** Объект БД, объявленный в `## OBJECT`: obj-path + тип + действие. */
 export interface TFdDbObject {
@@ -101,10 +101,16 @@ export async function validateDbObject(
 export async function collectSnapshot(
   objects: TFdDbObject[],
   getDefinition: TFdGetDefinition,
-): Promise<TSnapshotObject[]> {
-  const result: TSnapshotObject[] = [];
+  opts?: { onError?: (objPath: string, error: unknown) => void },
+): Promise<TFdSnapshotObject[]> {
+  const result: TFdSnapshotObject[] = [];
   for (const obj of objects) {
-    result.push({ objPath: obj.objPath, definition: await getDefinition(obj.objPath) });
+    try {
+      result.push({ objPath: obj.objPath, definition: await getDefinition(obj.objPath) });
+    } catch (error) {
+      if (opts?.onError) opts.onError(obj.objPath, error);
+      else throw error;
+    }
   }
   return result;
 }

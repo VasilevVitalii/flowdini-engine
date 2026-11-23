@@ -148,7 +148,7 @@ API:
 
 - `extractDbObjects(content)` — объекты из `## OBJECT`-топиков (`obj-path`/`obj-kind`/`obj-action`); неполные пропускаются (их ловит `taskCheck`).
 - `validateDbObject(objects, lookup)` — сверка против фактов БД: `obj-kind` ∈ {`procedure`,`function`,`view`}; `create` ⇒ объекта нет; `edit` ⇒ объект есть; тип в БД совпадает с `obj-kind`. Возвращает `TFdDbError[]` (`objPath` + `error`).
-- `collectSnapshot(objects, getDefinition)` — определения (`get_definition` MCP) → `TSnapshotObject[]` для `captureSnapshot`.
+- `collectSnapshot(objects, getDefinition, { onError? })` — определения (`get_definition` MCP) → `TFdSnapshotObject[]` для `captureSnapshot`; `onError` ловит сбой (объект пропускается) вместо throw.
 - `mcpMatrix(spec)` (в `spec.ts`) — матрица «роль → инструменты» из `roles[*].tools` с наследованием `INSTANCE`→`FUNC`; роли без `tools` опускаются.
 
 Колбэки: `TFdDbLookup = (objPath) => Promise<{ exists, kind }>`, `TFdGetDefinition = (objPath) => Promise<string>`. Адаптер к `vv-db-mcp` (stdio) — вне ядра (gi-bridge); `get_definition` отдаёт `not_found` как ошибку инструмента — адаптер трактует её как `exists: false`, прочие ошибки — как «не удалось проверить» (не «есть/нет»).

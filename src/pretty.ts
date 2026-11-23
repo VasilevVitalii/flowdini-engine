@@ -1,8 +1,8 @@
-import { inlineFieldToText, levelToText } from 'flowdini-spec';
+import { inlineFieldToText, levelToText, topicHeading } from 'flowdini-spec';
 import type { TFdContent, TFdInlineField, TFdItem } from 'flowdini-spec';
 
 /** Текущее время в UTC (ISO) для канона `fd-createdAt` (`YYYY-MM-DDTHH:MM:SSZ`). */
-function nowStamp(now: () => Date): string {
+export function nowStamp(now: () => Date): string {
   return now().toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
@@ -50,10 +50,9 @@ function orderFields(
 /** Один топик: заголовок, свойства одной строкой, пустая строка, тело (если есть). */
 function prettyItem(item: TFdItem, now: () => Date): string {
   const { topic } = item;
-  const deepest = topic.level3 ?? topic.level2 ?? topic.level1;
-  if (!deepest) return '';
-  const headingLevel: 1 | 2 | 3 = topic.level3 ? 3 : topic.level2 ? 2 : 1;
-  const head = levelToText(deepest, headingLevel);
+  const th = topicHeading(topic);
+  if (th === null) return '';
+  const head = levelToText(th.heading, th.level);
 
   // `fd-createdAt` считается существующим, если он есть в любом поле топика
   // (не только в свойствах `topic`) — иначе он продублируется.
