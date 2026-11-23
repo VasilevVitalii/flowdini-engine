@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { textToStructure } from 'flowdini-spec';
-import { fixReference, isDone, reviewFixIterations, sections } from '../src/state.js';
+import { fixReference, isDone, reviewFixIterations, sections, isAccept, acceptOf } from '../src/state.js';
 
 const s = (t: string) => textToStructure(t, true);
 
@@ -166,5 +166,58 @@ describe('fixReference', () => {
 
   it('другой тип подзаголовка — только свои предыдущие (их нет → пусто)', () => {
     expect(fixReference(s(journal), 'REVIEW 1#RISK 3')).toBe('');
+  });
+});
+
+describe('isAccept', () => {
+  it('ровно `+` (с пробелами/переносом) — accept', () => {
+    expect(isAccept('+')).toBe(true);
+    expect(isAccept(' +\n')).toBe(true);
+  });
+
+  it('иное («+1», «да», «ок», текст) — не accept', () => {
+    expect(isAccept('+1')).toBe(false);
+    expect(isAccept('да')).toBe(false);
+    expect(isAccept('ок')).toBe(false);
+    expect(isAccept('нет, в общем логе')).toBe(false);
+  });
+
+  it('null (нет тела) — не accept', () => {
+    expect(isAccept(null)).toBe(false);
+  });
+});
+
+describe('acceptOf', () => {
+  const answers = [
+    '# ANSWERS 1', '',
+    '## A 1',
+    '[fd-from:: HUMAN.ANALYST] [fd-to:: AI.ANALYST] [fd-reply:: [[#QUESTIONS 1#Q 1]]]',
+    '', '+',
+    '',
+    '## A 2',
+    '[fd-from:: HUMAN.ANALYST] [fd-to:: AI.ANALYST] [fd-reply:: [[#QUESTIONS 1#Q 2]]]',
+    '', 'да',
+  ].join('\n');
+
+  it('`+` — true', () => {
+    expect(acceptOf(s(answers), 'ANSWERS 1#A 1')).toBe(true);
+  });
+
+  it('иной ответ — false', () => {
+    expect(acceptOf(s(answers), 'ANSWERS 1#A 2')).toBe(false);
+  });
+
+  it('не ANSWERS (ISSUE) — null', () => {
+    const c = s('# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nb\n');
+    expect(acceptOf(c, 'ISSUE 1')).toBeNull();
+  });
+
+  it('fd-from не HUMAN — null', () => {
+    const c = s('# ANSWERS 1\n\n## A 1\n[fd-from:: AI.ANALYST]\n\nb\n');
+    expect(acceptOf(c, 'ANSWERS 1#A 1')).toBeNull();
+  });
+
+  it('нет такого адреса — null', () => {
+    expect(acceptOf(s(answers), 'ANSWERS 1#A 9')).toBeNull();
   });
 });

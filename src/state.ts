@@ -1,5 +1,5 @@
 import type { TFdContent, TFdItem, TFdLevel } from 'flowdini-spec';
-import { extractLinks, parseAddr } from './addr.js';
+import { extractLinks, parseAddr, topicAddr } from './addr.js';
 import { contentPretty } from './pretty.js';
 
 /** Заголовки уровня 1 в порядке появления. */
@@ -183,4 +183,29 @@ export function fixReference(content: TFdContent, arcAddr: string): string {
     if (parts.length > 0) chunks.push(parts.join('\n\n'));
   }
   return chunks.join('\n\n');
+}
+
+/**
+ * Детерминированный accept ответа человека: тело ровно `+` (после trim).
+ * Любой иной ответ («да», «ок», замечания) — не accept, его разбирает `AI.ANALYST`.
+ */
+export function isAccept(text: string | null): boolean {
+  return text !== null && text.trim() === '+';
+}
+
+/**
+ * Детерминированный accept дуги-ответа человека (`ANSWERS n#A m`, `fd-from` HUMAN.*):
+ * тело ровно `+` → `true`; иной ответ человека → `false`; дуга не ответ человека
+ * (не `ANSWERS` или `fd-from` не HUMAN.*) → `null`.
+ */
+export function acceptOf(content: TFdContent, arcAddr: string): boolean | null {
+  for (const item of content.itemList) {
+    if (topicAddr(item.topic) !== arcAddr) continue;
+    const l1 = item.topic.level1;
+    if (l1 === null || l1.title !== 'ANSWERS') return null;
+    const from = item.topic.inlineList.find((f) => f.param === 'fd-from');
+    if (from === undefined || !from.valueList.some((v) => v.startsWith('HUMAN'))) return null;
+    return isAccept(item.text);
+  }
+  return null;
 }
