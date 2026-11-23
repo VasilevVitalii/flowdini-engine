@@ -30,6 +30,17 @@ export interface TFdNextStep {
  * `fd-reply` (внутри файла). Закрытие — по адресу топика (`L1#L2#L3`).
  */
 export function openArcs(content: TFdContent): TFdOpenArc[] {
+  // Рулевой ISSUE от HUMAN (`HUMAN.* → AI.ANALYST`) перебивает старые открытые дуги:
+  // всё, что было ДО последнего такого ISSUE, уже не актуально (курс сменился).
+  // Сам рулевой ISSUE и всё ПОСЛЕ него остаются в игре.
+  let steerAt = -1;
+  content.itemList.forEach((item, i) => {
+    const l1 = item.topic.level1;
+    if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) return;
+    const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
+    if (from.some((r) => roleCovers('HUMAN', r))) steerAt = i;
+  });
+
   // Все fd-reply: адрес → список fd-from ответивших (кто закрывает дугу).
   const replies = new Map<string, string[]>();
   for (const item of content.itemList) {
@@ -50,18 +61,19 @@ export function openArcs(content: TFdContent): TFdOpenArc[] {
     }
   }
   const arcs: TFdOpenArc[] = [];
-  for (const item of content.itemList) {
+  content.itemList.forEach((item, i) => {
+    if (i < steerAt) return; // перебито рулевым ISSUE от HUMAN
     const to = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
-    if (to.length === 0) continue;
+    if (to.length === 0) return;
     const addr = topicAddr(item.topic);
-    if (addr === '') continue;
+    if (addr === '') return;
     // Закрыта, только если ответил кто-то из адресатов (адресат покрывает ответившего).
     const replyFrom = replies.get(addr) ?? [];
     const answered = to.some((t) => replyFrom.some((rf) => roleCovers(t, rf)));
-    if (answered) continue;
+    if (answered) return;
     const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
     arcs.push({ addr, from, to });
-  }
+  });
   return arcs;
 }
 

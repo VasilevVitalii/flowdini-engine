@@ -78,6 +78,90 @@ body
     // Q 1 адресована HUMAN.CODER, а ответил HUMAN.ANALYST → дуга остаётся открытой.
     expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 1', 'QUESTIONS 1#Q 1', 'ANSWERS 1#A 1']);
   });
+
+  it('рулевой ISSUE от HUMAN перебивает старые открытые дуги', () => {
+    const c = contentOf(`# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body
+
+# ISSUE 2
+[fd-from:: HUMAN.CODER]
+[fd-to:: AI.ANALYST]
+
+сменить курс
+`);
+    // CODE 1 → AI.REVIEWER перебит; осталась только дуга рулевого ISSUE.
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 2']);
+  });
+
+  it('дуги ПОСЛЕ рулевого ISSUE остаются в игре', () => {
+    const c = contentOf(`# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body
+
+# ISSUE 2
+[fd-from:: HUMAN.CODER]
+[fd-to:: AI.ANALYST]
+
+сменить курс
+
+# CODE 2
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body2
+`);
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 2', 'CODE 2']);
+  });
+
+  it('ISSUE от AI.WRITER (не HUMAN) дуги НЕ перебивает', () => {
+    const c = contentOf(`# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body
+
+# ISSUE 2
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+постановка
+`);
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['CODE 1', 'ISSUE 2']);
+  });
+
+  it('последний рулевой ISSUE отменяет всё до него, включая предыдущий рулевой', () => {
+    const c = contentOf(`# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body
+
+# ISSUE 2
+[fd-from:: HUMAN.CODER]
+[fd-to:: AI.ANALYST]
+
+курс 1
+
+# CODE 3
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body3
+
+# ISSUE 4
+[fd-from:: HUMAN.CODER]
+[fd-to:: AI.ANALYST]
+
+курс 2
+`);
+    // Всё до ISSUE 4 (включая ISSUE 2 и CODE 3) перебито; осталась только ISSUE 4.
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 4']);
+  });
 });
 
 describe('nextStep', () => {
