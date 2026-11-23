@@ -24,6 +24,36 @@ describe('taskCheck', () => {
     expect(await taskCheck(dir)).toEqual([]);
   });
 
+  it('# CRASH 1 с broken link и fd-полями внутри fence — taskCheck чист', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'chat.md'), `# ISSUE 1
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+body
+
+# CRASH 1
+
+Процесс остановлен из-за непредвиденной ошибки.
+
+Ошибки:
+
+~~~
+chat.md: broken link: "[[#ISSUE 9]]"
+~~~
+
+Ответ AI, породивший ошибки:
+
+~~~
+## BUG
+[fd-from:: AI.REVIEWER]
+[fd-to:: AI.CODER.SENIOR]
+[[#ISSUE 9]]
+~~~
+`);
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
   it('exclude пропускает сырьё с «неправильными» заголовками', async () => {
     const dir = await tmp();
     await writeFile(join(dir, 'a.md'), '# CODE 1\n\nbody\n');

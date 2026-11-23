@@ -2,6 +2,7 @@ import { textToStructure } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
 import { describe, expect, it } from 'vitest';
 import { gateDue, nextStep, openArcs, roleBrief } from '../src/orchestrator.js';
+import { isCrashed } from '../src/state.js';
 import { parseSpec } from '../src/spec.js';
 
 function contentOf(md: string): TFdContent {
@@ -226,6 +227,34 @@ body
 закрыто
 `);
     expect(nextStep(c)).toBeNull();
+  });
+
+  it('CRASH при открытых дугах → null (авария, ход не даём)', () => {
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+body
+
+# CRASH 1
+
+непредвиденная ошибка
+
+~~~
+broken link: "[[#ISSUE 9]]"
+~~~
+`);
+    expect(nextStep(c)).toBeNull();
+  });
+});
+
+describe('isCrashed', () => {
+  it('есть # CRASH n → true', () => {
+    expect(isCrashed(contentOf(`# CRASH 1\n\nошибка\n`))).toBe(true);
+  });
+
+  it('без CRASH → false', () => {
+    expect(isCrashed(contentOf(`# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n`))).toBe(false);
   });
 });
 

@@ -76,3 +76,8 @@ export function isDone(content: TFdContent): boolean {
   const l1s = level1List(content);
   return l1s.length > 0 && l1s[l1s.length - 1].title === 'DONE';
 }
+
+/** Таск в аварийном состоянии: в журнале есть `# CRASH n` (терминальный маркер, процесс стоит). */
+export function isCrashed(content: TFdContent): boolean {
+  return level1List(content).some((l) => l.title === 'CRASH');
+}
