@@ -2,7 +2,7 @@ import { textToStructure } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
 import { describe, expect, it } from 'vitest';
 import { collectSnapshot, extractDbObjects, validateDbObject } from '../src/db.js';
-import type { TFdDbFact } from '../src/db.js';
+import type { TFdDbFact, TFdDbObjectKind } from '../src/db.js';
 
 function contentOf(md: string): TFdContent {
   return textToStructure(md, true);
@@ -31,6 +31,31 @@ body
       { objPath: 'dbo.f_a', objKind: 'function', objAction: 'create' },
       { objPath: 'dbo.p_b', objKind: 'procedure', objAction: 'edit' },
     ]);
+  });
+
+  it('obj-path с несколькими значениями даёт по объекту на каждое', () => {
+    const c = contentOf(`# ISSUE 1
+
+## OBJECT 1
+[obj-kind:: function] [obj-action:: create] [obj-path:: dbo.f_a, dbo.f_b]
+
+body
+`);
+    expect(extractDbObjects(c)).toEqual([
+      { objPath: 'dbo.f_a', objKind: 'function', objAction: 'create' },
+      { objPath: 'dbo.f_b', objKind: 'function', objAction: 'create' },
+    ]);
+  });
+
+  it('obj-path в теле OBJECT не объявляет объект (только свойства топика)', () => {
+    const c = contentOf(`# ISSUE 1
+
+## OBJECT 1
+[obj-kind:: function] [obj-action:: create]
+
+[obj-path:: dbo.ghost] — упомянут только в прозе
+`);
+    expect(extractDbObjects(c)).toEqual([]);
   });
 });
 
@@ -82,11 +107,13 @@ describe('validateDbObject', () => {
   });
 
   it('невалидный obj-kind → ошибка без обращения к БД', async () => {
-    const objects = [{ objPath: 'dbo.t_a', objKind: 'table', objAction: 'edit' as const }];
+    const objects = [
+      { objPath: 'dbo.t_a', objKind: 'table' as unknown as TFdDbObjectKind, objAction: 'edit' as const },
+    ];
     let called = false;
     const errors = await validateDbObject(objects, async () => {
       called = true;
-      return { exists: true, kind: 'table' };
+      return { exists: true, kind: 'view' };
     });
     expect(errors).toEqual([{ objPath: 'dbo.t_a', error: 'invalid obj-kind: "table"' }]);
     expect(called).toBe(false);

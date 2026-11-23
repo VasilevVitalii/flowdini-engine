@@ -1,8 +1,8 @@
-import { access } from 'node:fs/promises';
-import { join } from 'node:path';
+import { realpath, stat } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
 import { FdTaskFile, textToStructure, stripFences } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
-import { buildIndex, extractLinks, levelText, makeResolver, parseAddr, topicAddr } from './addr.js';
+import { buildIndex, extractLinks, levelText, makeResolver, parseAddr, topicAddr, topicFields } from './addr.js';
 import { roleCovers } from './role.js';
 import { level1List, sections } from './state.js';
 
@@ -108,9 +108,7 @@ function checkContent(
 
   // Ожидание от нескольких ролей допустимо только если все они HUMAN.*.
   for (const item of content.itemList) {
-    const roles = item.topic.inlineList
-      .filter((f) => f.param === 'fd-to')
-      .flatMap((f) => f.valueList);
+    const roles = topicFields(item.topic, 'fd-to');
     if (roles.length > 1 && roles.some((r) => !roleCovers('HUMAN', r))) {
       errors.push(`multiple roles awaited: "${roles.join(', ')}"`);
     }
@@ -156,8 +154,8 @@ function checkContent(
   for (const item of content.itemList) {
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'DONE' || item.topic.level2 !== null) continue;
-    const fromVals = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
-    const toVals = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
+    const fromVals = topicFields(item.topic, 'fd-from');
+    const toVals = topicFields(item.topic, 'fd-to');
     for (const v of fromVals) {
       if (!roleCovers('HUMAN', v)) errors.push(`DONE fd-from must be HUMAN.*: "${v}"`);
     }
@@ -165,16 +163,19 @@ function checkContent(
   }
 
   // Матрица ISSUE: акт передачи, адресат определяется отправителем.
+  // Проверяется каждая пара «отправитель → адресат» из свойств топика.
   for (const item of content.itemList) {
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) continue;
-    const fromVals = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
-    const toVals = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
+    const fromVals = topicFields(item.topic, 'fd-from');
+    const toVals = topicFields(item.topic, 'fd-to');
     if (fromVals.length === 0 || toVals.length === 0) continue; // контейнер или неполный акт — матрица не проверяет
-    const from = fromVals[0];
-    const to = toVals[0];
-    const ok = ISSUE_ALLOWED.some(([pf, pt]) => roleCovers(pf, from) && roleCovers(pt, to));
-    if (!ok) errors.push(`invalid ISSUE transfer: "${from}" → "${to}"`);
+    for (const from of fromVals) {
+      for (const to of toVals) {
+        const ok = ISSUE_ALLOWED.some(([pf, pt]) => roleCovers(pf, from) && roleCovers(pt, to));
+        if (!ok) errors.push(`invalid ISSUE transfer: "${from}" → "${to}"`);
+      }
+    }
   }
 
   // OBJECT: полнота obj-kind/obj-action/obj-path, валидный obj-action,
@@ -184,25 +185,25 @@ function checkContent(
   for (const item of content.itemList) {
     const l2 = item.topic.level2;
     if (l2 === null || l2.title !== 'OBJECT' || item.topic.level3 !== null) continue;
-    const fields = item.topic.inlineList;
-    const has = (p: string): boolean =>
-      fields.some((f) => f.param === p && f.valueList.length > 0 && f.valueList.some((v) => v.trim() !== ''));
-    const missing = ['obj-kind', 'obj-action', 'obj-path'].filter((p) => !has(p));
+    // Свойства топика, не тело: поле в прозе не объявляет объект плана.
+    const kindVals = topicFields(item.topic, 'obj-kind');
+    const actionVals = topicFields(item.topic, 'obj-action');
+    const pathVals = topicFields(item.topic, 'obj-path');
+    const nonEmpty = (vs: string[]): boolean => vs.some((v) => v.trim() !== '');
+    const missing = [
+      nonEmpty(kindVals) ? null : 'obj-kind',
+      nonEmpty(actionVals) ? null : 'obj-action',
+      nonEmpty(pathVals) ? null : 'obj-path',
+    ].filter((p): p is string => p !== null);
     if (missing.length > 0) {
       errors.push(`OBJECT incomplete: missing ${missing.join('/')} ("${levelText(l2)}")`);
     }
-    for (const f of fields) {
-      if (f.param === 'obj-action') {
-        for (const v of f.valueList) {
-          if (v !== 'create' && v !== 'edit') errors.push(`invalid obj-action: "${v}"`);
-        }
-      }
-      if (f.param === 'obj-path') {
-        for (const v of f.valueList) {
-          if (objPaths.has(v)) errors.push(`duplicate obj-path: "${v}"`);
-          else objPaths.add(v);
-        }
-      }
+    for (const v of actionVals) {
+      if (v !== 'create' && v !== 'edit') errors.push(`invalid obj-action: "${v}"`);
+    }
+    for (const v of pathVals) {
+      if (objPaths.has(v)) errors.push(`duplicate obj-path: "${v}"`);
+      else objPaths.add(v);
     }
   }
 
@@ -217,7 +218,7 @@ function checkContent(
   for (const item of content.itemList) {
     const { level1, level2, level3 } = item.topic;
     if (level1?.title === 'REVIEW' && level2?.title === 'Q' && level3 === null) {
-      const toVals = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
+      const toVals = topicFields(item.topic, 'fd-to');
       if (toVals.length === 0) {
         errors.push('gate Q must have fd-to (HUMAN.CODER)');
       } else {
@@ -236,14 +237,30 @@ async function checkVault(content: TFdContent, vaultRoot: string): Promise<strin
   const errors: string[] = [];
   const vals: string[] = [];
   for (const f of content.inlineList) if (f.param === 'fd-vault') vals.push(...f.valueList);
-  for (const item of content.itemList) {
-    for (const f of item.topic.inlineList) if (f.param === 'fd-vault') vals.push(...f.valueList);
+  for (const item of content.itemList) vals.push(...topicFields(item.topic, 'fd-vault'));
+
+  // Реальный корень vault (по symlink); без него все ссылки битые.
+  const vaultReal = await realpath(vaultRoot).catch(() => null);
+  if (vaultReal === null) {
+    errors.push(`vault root not found: "${vaultRoot}"`);
+    return errors;
   }
   for (const v of vals) {
-    try {
-      await access(join(vaultRoot, v));
-    } catch {
+    const p = resolve(vaultRoot, v);
+    const rp = await realpath(p).catch(() => null);
+    if (rp === null) {
       errors.push(`vault file not found: "${v}"`);
+      continue;
+    }
+    // Containment: ссылка не должна выходить за vaultRoot (напр. `../../etc/passwd`).
+    if (rp !== vaultReal && !rp.startsWith(vaultReal + sep)) {
+      errors.push(`vault file outside vault: "${v}"`);
+      continue;
+    }
+    // Ссылка обязана указывать на файл, не на каталог.
+    const st = await stat(rp).catch(() => null);
+    if (st === null || !st.isFile()) {
+      errors.push(`vault entry is not a file: "${v}"`);
     }
   }
   return errors;

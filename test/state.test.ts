@@ -182,6 +182,24 @@ describe('fixReference', () => {
   it('другой тип подзаголовка — только свои предыдущие (их нет → пусто)', () => {
     expect(fixReference(s(journal), 'REVIEW 1#RISK 3')).toBe('');
   });
+
+  it('детерминирован: использует переданный now для fd-createdAt', () => {
+    const journal2 = [
+      '# CODE 1', '[fd-from:: AI.CODER.JUNIOR]', '', 'code', '',
+      '# REVIEW 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug one', '',
+      '## BUG 2',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug two',
+    ].join('\n');
+    const t = new Date('2026-11-23T12:00:00.000Z');
+    const now = () => t;
+    const r = fixReference(s(journal2), 'REVIEW 1#BUG 2', now);
+    expect(r).toContain('2026-11-23T12:00:00Z');
+    expect(r).toBe(fixReference(s(journal2), 'REVIEW 1#BUG 2', now));
+  });
 });
 
 describe('isAccept', () => {
@@ -239,5 +257,10 @@ describe('acceptOf', () => {
   it('fd-from HUMANITY.* (похоже, но не HUMAN) — null', () => {
     const c = s('# ANSWERS 1\n\n## A 1\n[fd-from:: HUMANITY.CODER]\n\n+\n');
     expect(acceptOf(c, 'ANSWERS 1#A 1')).toBeNull();
+  });
+
+  it('не-канонический подзаголовок ANSWERS (L2 != A) — null', () => {
+    const c = s('# ANSWERS 1\n\n## BUG 1\n[fd-from:: HUMAN.ANALYST] [fd-to:: AI.ANALYST]\n\n+\n');
+    expect(acceptOf(c, 'ANSWERS 1#BUG 1')).toBeNull();
   });
 });

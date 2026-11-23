@@ -35,6 +35,12 @@ describe('parseSpec', () => {
   it('неизвестный ключ верхнего уровня (опечатка) — бросает', () => {
     expect(() => parseSpec('reviewlimit: 2\nroles: {}\n')).toThrow('неизвестный ключ "reviewlimit"');
   });
+
+  it('неверный тип скалярных полей отклоняется на парсинге', () => {
+    expect(() => parseSpec('reviewLimit: "2"\nroles: {}\n')).toThrow(/reviewLimit/);
+    expect(() => parseSpec('fixMode: true\nroles: {}\n')).toThrow(/fixMode/);
+    expect(() => parseSpec('fixReference: "yes"\nroles: {}\n')).toThrow(/fixReference/);
+  });
 });
 
 describe('validateSpec', () => {

@@ -136,7 +136,11 @@ function fixItemsFor(content: TFdContent, addr: string): TFdItem[] {
  * подзаголовки того же типа (`BUG`) с меньшим номером. Для L1-дуги или не-REVIEW
  * возвращает `''` (справки нет).
  */
-export function fixReference(content: TFdContent, arcAddr: string): string {
+export function fixReference(
+  content: TFdContent,
+  arcAddr: string,
+  now: () => Date = () => new Date(),
+): string {
   const seg = arcAddr.split('#');
   if (seg.length < 2) return '';
   const l1m = /^(\S+)\s+(\d+)$/.exec(seg[0]);
@@ -170,11 +174,11 @@ export function fixReference(content: TFdContent, arcAddr: string): string {
     const parts: string[] = [];
     if (note.length > 0) {
       parts.push(`Замечание «${l2.title} ${l2.idx}»:`);
-      parts.push(contentPretty({ inlineList: [], itemList: note, text: null }).trimEnd());
+      parts.push(contentPretty({ inlineList: [], itemList: note, text: null }, now).trimEnd());
     }
     if (fix.length > 0) {
       parts.push('Ответ кодера:');
-      parts.push(contentPretty({ inlineList: [], itemList: fix, text: null }).trimEnd());
+      parts.push(contentPretty({ inlineList: [], itemList: fix, text: null }, now).trimEnd());
     }
     if (parts.length > 0) chunks.push(parts.join('\n\n'));
   }
@@ -199,6 +203,11 @@ export function acceptOf(content: TFdContent, arcAddr: string): boolean | null {
     if (topicAddr(item.topic) !== arcAddr) continue;
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'ANSWERS') return null;
+    // Каноническая форма ответа человека: `ANSWERS n#A m` (L2 = `A`, без L3).
+    // Иной подзаголовок ANSWERS — не accept-дуга.
+    if (item.topic.level2 === null || item.topic.level2.title !== 'A' || item.topic.level3 !== null) {
+      return null;
+    }
     const from = topicFields(item.topic, 'fd-from');
     if (!from.some((v) => roleCovers('HUMAN', v))) return null;
     return isAccept(item.text);

@@ -29,7 +29,7 @@ export async function captureSnapshot(
   objects: TFdSnapshotObject[],
   now?: string,
 ): Promise<{ manifestPath: string; files: string[] }> {
-  const dir = join(taskDir, 'snapshots', String(iteration));
+  const dir = join(taskDir, 'snapshots', snapshotDirName(iteration));
   // Повторный снимок той же итерации (повтор после отката CRASH) — стереть старое.
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
@@ -63,4 +63,24 @@ function safeName(objPath: string): string {
     else out += '~' + (ch.codePointAt(0) ?? 0).toString(16) + '~';
   }
   return out;
+}
+
+/**
+ * Имя подкаталога снапшота: положительное целое (номер итерации) или `'baseline'`.
+ * Валидация обязательна — строка попадает в путь и под рекурсивный `rm`, поэтому
+ * произвольное значение (напр. `'../..'`) недопустимо.
+ */
+function snapshotDirName(iteration: number | string): string {
+  if (typeof iteration === 'number') {
+    if (!Number.isInteger(iteration) || iteration < 1) {
+      throw new Error(
+        `invalid snapshot iteration: ${JSON.stringify(iteration)} (expect positive integer or 'baseline')`,
+      );
+    }
+    return String(iteration);
+  }
+  if (iteration === 'baseline') return iteration;
+  throw new Error(
+    `invalid snapshot iteration: ${JSON.stringify(iteration)} (expect positive integer or 'baseline')`,
+  );
 }

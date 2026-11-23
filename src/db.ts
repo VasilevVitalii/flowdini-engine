@@ -1,23 +1,29 @@
 import type { TFdContent } from 'flowdini-spec';
 import type { TFdSnapshotObject } from './snapshot.js';
+import { topicFields } from './addr.js';
+
+/** Виды объектов БД, которые правит кодер. */
+export type TFdDbObjectKind = 'procedure' | 'function' | 'view';
 
 /** Объект БД, объявленный в `## OBJECT`: obj-path + тип + действие. */
 export interface TFdDbObject {
   /** obj-path (schema.name) — ключ объекта, объявленный в `OBJECT`. */
   objPath: string;
   /** Тип объекта: `procedure` | `function` | `view` (кодер правит только их). */
-  objKind: string;
+  objKind: TFdDbObjectKind;
   /** Действие: `create` (объекта ещё нет) или `edit` (уже есть). */
   objAction: 'create' | 'edit';
 }
 
-/** Факт о существовании и типе объекта в БД (результат MCP-агента). */
-export interface TFdDbFact {
-  /** Объект существует в БД (`true`), нет (`false`), не удалось проверить (`null`). */
-  exists: boolean | null;
-  /** Тип объекта в БД (`procedure`/`function`/`view`/…), `null` — объекта нет. */
-  kind: string | null;
-}
+/**
+ * Факт о существовании и типе объекта в БД (результат MCP-агента).
+ * Дискриминант `exists`: существующий объект всегда имеет определённый `kind`,
+ * иначе `edit` проходил бы сверку без подтверждения типа.
+ */
+export type TFdDbFact =
+  | { exists: true; kind: TFdDbObjectKind }
+  | { exists: false; kind: null }
+  | { exists: null; kind: null };
 
 /** Запрос факта БД по obj-path. Реализует MCP-агент через `vv-db-mcp` (ядро в БД не ходит). */
 export type TFdDbLookup = (objPath: string) => Promise<TFdDbFact>;
@@ -43,14 +49,15 @@ export function extractDbObjects(content: TFdContent): TFdDbObject[] {
   for (const item of content.itemList) {
     const l2 = item.topic.level2;
     if (l2 === null || l2.title !== 'OBJECT' || item.topic.level3 !== null) continue;
-    const get = (p: string): string | undefined =>
-      item.topic.inlineList.find((f) => f.param === p)?.valueList[0];
-    const objPath = get('obj-path');
-    const objKind = get('obj-kind');
-    const objAction = get('obj-action');
-    if (objPath === undefined || objKind === undefined || objAction === undefined) continue;
+    // Читаем только свойства топика (не тело): поле в прозе не объявляет объект.
+    const objPaths = topicFields(item.topic, 'obj-path');
+    const objKind = topicFields(item.topic, 'obj-kind')[0];
+    const objAction = topicFields(item.topic, 'obj-action')[0];
+    if (objPaths.length === 0 || objKind === undefined || objAction === undefined) continue;
     if (objAction !== 'create' && objAction !== 'edit') continue; // невалидный action ловит taskCheck
-    objects.push({ objPath, objKind, objAction });
+    for (const objPath of objPaths) {
+      objects.push({ objPath, objKind: objKind as TFdDbObjectKind, objAction });
+    }
   }
   return objects;
 }

@@ -1,6 +1,6 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { taskCheck } from '../src/task.js';
 
@@ -318,6 +318,30 @@ describe('taskCheck: fd-vault', () => {
     const dir = await tmp();
     await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: ghost.md]\n\nbody\n');
     expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('ссылка за границу vault (path traversal) — ошибка', async () => {
+    const dir = await tmp();
+    const vault = await tmp();
+    const outside = await tmp(); // другой каталог вне vault
+    const secret = join(outside, 'secret.md');
+    await writeFile(secret, '# secret\n');
+    const rel = relative(vault, secret); // ../fd-engine-YYY/secret.md
+    await writeFile(join(dir, 'a.md'), `# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: ${rel}]\n\nbody\n`);
+    expect(await taskCheck(dir, { vaultRoot: vault })).toEqual([
+      { relativeFileName: 'a.md', error: `vault file outside vault: "${rel}"` },
+    ]);
+  });
+
+  it('ссылка на каталог — ошибка (нужен файл)', async () => {
+    const dir = await tmp();
+    const vault = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-from:: AI.ANALYST]\n[fd-to:: AI.CODER]\n[fd-vault:: sub]\n\nbody\n');
+    // sub — каталог внутри vault, не файл.
+    await mkdir(join(vault, 'sub'));
+    expect(await taskCheck(dir, { vaultRoot: vault })).toEqual([
+      { relativeFileName: 'a.md', error: 'vault entry is not a file: "sub"' },
+    ]);
   });
 });
 

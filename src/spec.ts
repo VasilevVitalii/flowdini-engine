@@ -99,7 +99,12 @@ export function validateSpec(config: TFdSpecConfig): TFdSpecError[] {
   return errors;
 }
 
-/** Распарсить YAML в SPEC-конфиг (форма полей не валидируется — см. `validateSpec`). */
+/**
+ * Распарсить YAML в SPEC-конфиг. Неизвестные ключи и неверные типы скалярных
+ * полей (`reviewLimit`/`fixMode`/`fixReference`) отклоняются здесь — результат
+ * типизирован и не требует `validateSpec` для этих полей. Диапазоны и вложенные
+ * role-спеки проверяет `validateSpec`.
+ */
 export function parseSpec(text: string): TFdSpecConfig {
   const raw = parse(text) as unknown;
   if (raw === null || raw === undefined) {
@@ -118,9 +123,24 @@ export function parseSpec(text: string): TFdSpecConfig {
     throw new Error('SPEC: roles должен быть объектом');
   }
   const config: TFdSpecConfig = { roles: roles as Record<string, TFdRoleSpec> };
-  if (obj.reviewLimit !== undefined) config.reviewLimit = obj.reviewLimit as number;
-  if (obj.fixMode !== undefined) config.fixMode = obj.fixMode as 'bulk' | 'item';
-  if (obj.fixReference !== undefined) config.fixReference = obj.fixReference as boolean;
+  if (obj.reviewLimit !== undefined) {
+    if (typeof obj.reviewLimit !== 'number') {
+      throw new Error(`SPEC: reviewLimit должен быть числом, получено ${JSON.stringify(obj.reviewLimit)}`);
+    }
+    config.reviewLimit = obj.reviewLimit;
+  }
+  if (obj.fixMode !== undefined) {
+    if (obj.fixMode !== 'bulk' && obj.fixMode !== 'item') {
+      throw new Error(`SPEC: fixMode должен быть "bulk" или "item", получено ${JSON.stringify(obj.fixMode)}`);
+    }
+    config.fixMode = obj.fixMode;
+  }
+  if (obj.fixReference !== undefined) {
+    if (typeof obj.fixReference !== 'boolean') {
+      throw new Error(`SPEC: fixReference должен быть boolean, получено ${JSON.stringify(obj.fixReference)}`);
+    }
+    config.fixReference = obj.fixReference;
+  }
   return config;
 }
 

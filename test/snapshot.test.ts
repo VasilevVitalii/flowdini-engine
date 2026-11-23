@@ -41,4 +41,23 @@ describe('captureSnapshot', () => {
     ]);
     expect(new Set(files).size).toBe(2);
   });
+
+  it('iteration: "baseline" допустим, произвольная строка — отказ', async () => {
+    const dir = await tmp();
+    const b = await captureSnapshot(dir, 'baseline', [{ objPath: 'dbo.x', definition: 'SELECT 1' }]);
+    expect(b.files[0]).toContain('/snapshots/baseline/');
+    await expect(captureSnapshot(dir, '../..', [{ objPath: 'dbo.x', definition: 'SELECT 1' }])).rejects.toThrow(
+      /invalid snapshot iteration/,
+    );
+  });
+
+  it('iteration: только положительное целое (0 и дробное — отказ)', async () => {
+    const dir = await tmp();
+    await expect(captureSnapshot(dir, 0, [{ objPath: 'dbo.x', definition: 'SELECT 1' }])).rejects.toThrow(
+      /invalid snapshot iteration/,
+    );
+    await expect(captureSnapshot(dir, 1.5, [{ objPath: 'dbo.x', definition: 'SELECT 1' }])).rejects.toThrow(
+      /invalid snapshot iteration/,
+    );
+  });
 });

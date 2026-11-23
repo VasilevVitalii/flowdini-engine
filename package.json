@@ -39,7 +39,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "flowdini-spec": "^0.4.4",
+    "flowdini-spec": "^0.4.5",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
