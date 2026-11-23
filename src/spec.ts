@@ -19,6 +19,10 @@ export interface TFdRoleSpec {
 export interface TFdSpecConfig {
   /** Порог итераций REVIEW→FIX: после него в `REVIEW` первым идёт `## Q` к HUMAN.CODER. Не задан — гейт выключен. */
   reviewLimit?: number;
+  /** Режим обработки замечаний REVIEW: `item` — отдельный FIX-раздел на каждое замечание (заголовок и свойства формирует хост; по умолчанию); `bulk` — один FIX на все замечания (заголовки и свойства пишет модель). */
+  fixMode?: 'bulk' | 'item';
+  /** При `fixMode: item`: подавать кодеру справку — предыдущие пункты этого REVIEW и ответы кодера на них. */
+  fixReference?: boolean;
   /** Реестр ролей: ключ `FUNC[.INSTANCE]`; `INSTANCE` наследует `FUNC`. */
   roles: Record<string, TFdRoleSpec>;
 }
@@ -44,6 +48,19 @@ export function validateSpec(config: TFdSpecConfig): TFdSpecError[] {
       path: 'reviewLimit',
       error: `must be a non-negative integer, got ${JSON.stringify(config.reviewLimit)}`,
     });
+  }
+  if (
+    config.fixMode !== undefined &&
+    config.fixMode !== 'bulk' &&
+    config.fixMode !== 'item'
+  ) {
+    errors.push({
+      path: 'fixMode',
+      error: `must be 'bulk' or 'item', got ${JSON.stringify(config.fixMode)}`,
+    });
+  }
+  if (config.fixReference !== undefined && typeof config.fixReference !== 'boolean') {
+    errors.push({ path: 'fixReference', error: 'must be a boolean' });
   }
   for (const [role, spec] of Object.entries(config.roles)) {
     if (!ROLE_RE.test(role)) {
@@ -88,6 +105,8 @@ export function parseSpec(text: string): TFdSpecConfig {
   }
   const config: TFdSpecConfig = { roles: roles as Record<string, TFdRoleSpec> };
   if (obj.reviewLimit !== undefined) config.reviewLimit = obj.reviewLimit as number;
+  if (obj.fixMode !== undefined) config.fixMode = obj.fixMode as 'bulk' | 'item';
+  if (obj.fixReference !== undefined) config.fixReference = obj.fixReference as boolean;
   return config;
 }
 

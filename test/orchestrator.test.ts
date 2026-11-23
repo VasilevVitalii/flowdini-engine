@@ -268,20 +268,32 @@ describe('gateDue', () => {
 [fd-to:: AI.REVIEWER]
 
 # REVIEW 1
+
+## BUG 1
 [fd-from:: AI.REVIEWER]
 [fd-to:: AI.CODER]
+[fd-reply:: [[#CODE 1]]]
 
 # FIX 1
+
+## BUG 1
 [fd-from:: AI.CODER.SENIOR]
 [fd-to:: AI.REVIEWER]
+[fd-reply:: [[#REVIEW 1#BUG 1]]]
 
 # REVIEW 2
+
+## BUG 1
 [fd-from:: AI.REVIEWER]
 [fd-to:: AI.CODER]
+[fd-reply:: [[#FIX 1#BUG 1]]]
 
 # FIX 2
+
+## BUG 1
 [fd-from:: AI.CODER.SENIOR]
 [fd-to:: AI.REVIEWER]
+[fd-reply:: [[#REVIEW 2#BUG 1]]]
 `;
 
   it('число REVIEW достигло порога → true', () => {

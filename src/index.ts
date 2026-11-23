@@ -17,7 +17,7 @@ export { parseSpec, readSpec, resolveRole, validateSpec, mcpMatrix } from './spe
 export type { TFdSpecConfig, TFdRoleSpec, TFdSpecError } from './spec.js';
 export { extractDbObjects, validateDbObject, collectSnapshot } from './db.js';
 export type { TFdDbObject, TFdDbFact, TFdDbLookup, TFdGetDefinition, TFdDbError } from './db.js';
-export { level1List, sections, reviewFixIterations, isDone, isCrashed } from './state.js';
+export { level1List, sections, reviewFixIterations, fixReference, isDone, isCrashed } from './state.js';
 export type { TFdSection } from './state.js';
 export { taskCheck } from './task.js';
 export type { TFdTaskError, TFdTaskCheckOptions } from './task.js';
