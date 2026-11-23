@@ -15,10 +15,8 @@ export interface TFdOpenArc {
   to: string[];
 }
 
-/** Следующий ход процесса: роли-адресаты + рекомендуемый раздел + дуга. */
+/** Следующий ход процесса: рекомендуемый раздел + открытая дуга (адресаты — в `arc.to`). */
 export interface TFdNextStep {
-  /** Денормализованный алиас `arc.to` — ходовой читатель `roles[0]` без разыменования `arc`. */
-  roles: string[];
   /** Рекомендуемый L1-раздел ответа; `null` — роль решает сама (например `AI.ANALYST`). */
   section: string | null;
   /** Открытая дуга, на которую отвечают. */
@@ -106,7 +104,7 @@ export function nextStep(content: TFdContent): TFdNextStep | null {
   if (arcs.length === 0) return null;
   const human = arcs.filter((a) => a.to.some((r) => roleCovers('HUMAN', r)));
   const chosen = (human.length > 0 ? human : arcs)[0];
-  return { roles: chosen.to, section: sectionFor(chosen), arc: chosen };
+  return { section: sectionFor(chosen), arc: chosen };
 }
 
 /**

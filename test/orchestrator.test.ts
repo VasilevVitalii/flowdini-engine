@@ -244,7 +244,7 @@ describe('nextStep', () => {
 body
 `);
     const step = nextStep(c);
-    expect(step?.roles).toEqual(['HUMAN.ANALYST']);
+    expect(step?.arc.to).toEqual(['HUMAN.ANALYST']);
     expect(step?.section).toBe('ANSWERS');
   });
 
@@ -256,7 +256,7 @@ body
 body
 `);
     const step = nextStep(c);
-    expect(step?.roles).toEqual(['AI.CODER']);
+    expect(step?.arc.to).toEqual(['AI.CODER']);
     expect(step?.section).toBe('CODE');
   });
 

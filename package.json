@@ -1,6 +1,6 @@
 {
   "name": "flowdini-engine",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Deterministic execution engine for flowdini: journal orchestration (arcs, gating, roles) plus content validation and formatting",
   "type": "module",
   "main": "./dist/index.js",
