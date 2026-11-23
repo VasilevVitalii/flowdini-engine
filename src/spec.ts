@@ -70,6 +70,10 @@ export function validateSpec(config: TFdSpecConfig): TFdSpecError[] {
       });
       continue;
     }
+    if (spec === null || spec === undefined || typeof spec !== 'object' || Array.isArray(spec)) {
+      errors.push({ path: `roles.${role}`, error: 'must be an object (mapping), not null' });
+      continue;
+    }
     if (spec.model !== undefined && (typeof spec.model !== 'string' || spec.model.trim() === '')) {
       errors.push({ path: `roles.${role}.model`, error: 'must be a non-empty string' });
     }

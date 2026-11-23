@@ -220,4 +220,9 @@ describe('acceptOf', () => {
   it('нет такого адреса — null', () => {
     expect(acceptOf(s(answers), 'ANSWERS 1#A 9')).toBeNull();
   });
+
+  it('fd-from HUMANITY.* (похоже, но не HUMAN) — null', () => {
+    const c = s('# ANSWERS 1\n\n## A 1\n[fd-from:: HUMANITY.CODER]\n\n+\n');
+    expect(acceptOf(c, 'ANSWERS 1#A 1')).toBeNull();
+  });
 });

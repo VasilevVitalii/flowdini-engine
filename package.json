@@ -1,6 +1,6 @@
 {
   "name": "flowdini-engine",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Execution engine for flowdini: content validation and formatting",
   "type": "module",
   "main": "./dist/index.js",

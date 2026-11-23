@@ -206,6 +206,12 @@ describe('taskCheck: терминальность DONE', () => {
       { relativeFileName: 'a.md', error: 'DONE must not have fd-to' },
     ]);
   });
+
+  it('DONE → ISSUE (переоткрытие) → CODE — «section after DONE» не ругается', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# ISSUE 2\n[fd-from:: HUMAN.ANALYST]\n[fd-to:: AI.ANALYST]\n\nreopen\n\n# CODE 1\n[fd-from:: AI.CODER]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
 });
 
 describe('taskCheck: матрица ISSUE', () => {
@@ -328,5 +334,17 @@ describe('taskCheck: гибридный гейт', () => {
     expect(await taskCheck(dir)).toEqual([
       { relativeFileName: 'a.md', error: 'gate Q must be to HUMAN.CODER: "AI.CODER"' },
     ]);
+  });
+});
+
+describe('taskCheck: exclude', () => {
+  it('служебный файл (knowledge-candidates) не проверяется при exclude', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'chat.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n');
+    await writeFile(join(dir, 'knowledge-candidates.md'), '## тема\n\nзаметка\n');
+    const without = await taskCheck(dir);
+    expect(without.some((e) => e.relativeFileName === 'knowledge-candidates.md')).toBe(true);
+    const withExclude = await taskCheck(dir, { exclude: ['knowledge-candidates.md'] });
+    expect(withExclude.some((e) => e.relativeFileName === 'knowledge-candidates.md')).toBe(false);
   });
 });

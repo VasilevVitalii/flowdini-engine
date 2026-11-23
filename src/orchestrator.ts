@@ -3,7 +3,7 @@ import { extractLinks, parseAddr, topicAddr } from './addr.js';
 import { roleCovers } from './role.js';
 import { resolveRole } from './spec.js';
 import type { TFdRoleSpec, TFdSpecConfig } from './spec.js';
-import { reviewFixIterations, isCrashed } from './state.js';
+import { reviewFixIterations, isCrashed, isDone } from './state.js';
 
 /** Открытая дуга: топик с `fd-to`, на который ещё никто не ответил (`fd-reply`). */
 export interface TFdOpenArc {
@@ -109,6 +109,7 @@ function sectionFor(arc: TFdOpenArc): string | null {
  */
 export function nextStep(content: TFdContent): TFdNextStep | null {
   if (isCrashed(content)) return null; // CRASH — терминальный маркер аварии, ход не даём
+  if (isDone(content)) return null; // DONE — терминальный рубеж; переоткрытие — новый HUMAN ISSUE
   const arcs = openArcs(content);
   if (arcs.length === 0) return null;
   const human = arcs.filter((a) => a.to.some((r) => roleCovers('HUMAN', r)));

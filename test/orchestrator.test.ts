@@ -206,6 +206,49 @@ body
     expect(nextStep(c)?.section).toBe('REVIEW');
   });
 
+  it('DONE последним — null (не зацикливаем)', () => {
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+# DONE 1
+[fd-from:: HUMAN.ANALYST]
+
+closed
+`);
+    expect(nextStep(c)).toBeNull();
+  });
+
+  it('DONE с открытой AI-дугой ДО него — всё равно null', () => {
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+
+body
+
+# DONE 1
+[fd-from:: HUMAN.ANALYST]
+
+closed
+`);
+    expect(nextStep(c)).toBeNull();
+  });
+
+  it('DONE + переоткрытие (ISSUE после) — ход есть', () => {
+    const c = contentOf(`# DONE 1
+[fd-from:: HUMAN.ANALYST]
+
+closed
+
+# ISSUE 2
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+reopen
+`);
+    expect(nextStep(c)).not.toBeNull();
+  });
+
   it('ISSUE к AI.ANALYST → section null (аналитик решает)', () => {
     const c = contentOf(`# ISSUE 1
 [fd-from:: AI.WRITER]

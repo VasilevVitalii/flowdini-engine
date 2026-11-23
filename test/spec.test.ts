@@ -56,6 +56,13 @@ describe('validateSpec', () => {
     const errs = validateSpec({ roles: { 'AI.CODER': { tools: [1] as unknown as string[] } } });
     expect(errs).toEqual([{ path: 'roles.AI.CODER.tools', error: 'must be an array of strings' }]);
   });
+
+  it('роль без значения (null) — ошибка валидации, не TypeError', () => {
+    const errs = validateSpec(parseSpec('roles:\n  AI.CODER:\n'));
+    expect(errs).toEqual([
+      { path: 'roles.AI.CODER', error: 'must be an object (mapping), not null' },
+    ]);
+  });
 });
 
 describe('resolveRole', () => {

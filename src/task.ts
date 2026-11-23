@@ -151,9 +151,8 @@ function checkContent(
   for (let i = 0; i < l1s.length; i++) {
     if (l1s[i].title !== 'DONE') continue;
     for (let j = i + 1; j < l1s.length; j++) {
-      if (l1s[j].title !== 'ISSUE') {
-        errors.push(`section after DONE: "${levelText(l1s[j])}"`);
-      }
+      if (l1s[j].title === 'ISSUE') break; // переоткрытие — дальше новая задача
+      errors.push(`section after DONE: "${levelText(l1s[j])}"`);
     }
   }
   for (const item of content.itemList) {

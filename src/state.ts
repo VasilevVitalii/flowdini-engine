@@ -1,5 +1,6 @@
 import type { TFdContent, TFdItem, TFdLevel } from 'flowdini-spec';
 import { extractLinks, parseAddr, topicAddr } from './addr.js';
+import { roleCovers } from './role.js';
 import { contentPretty } from './pretty.js';
 
 /** Заголовки уровня 1 в порядке появления. */
@@ -204,7 +205,7 @@ export function acceptOf(content: TFdContent, arcAddr: string): boolean | null {
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'ANSWERS') return null;
     const from = item.topic.inlineList.find((f) => f.param === 'fd-from');
-    if (from === undefined || !from.valueList.some((v) => v.startsWith('HUMAN'))) return null;
+    if (from === undefined || !from.valueList.some((v) => roleCovers('HUMAN', v))) return null;
     return isAccept(item.text);
   }
   return null;
