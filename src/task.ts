@@ -14,23 +14,21 @@ export interface TFdTaskError {
   error: string;
 }
 
+/** Опции `taskCheck`. */
+export interface TFdTaskCheckOptions {
+  /** Имена файлов (с `.md`), которые не являются fd-файлами и не проверяются. */
+  exclude?: string[];
+  /** Корень vault: если задан, файлы из `fd-vault` проверяются на существование. */
+  vaultRoot?: string;
+}
+
 /**
  * Проверка всех `.md`-файлов каталога: дубли заголовков, заголовки без номера,
  * поля на строке заголовка, сиротские уровни, ожидание от нескольких ролей,
  * битые ссылки (внутри файла и на другие файлы), терминальность `DONE`,
  * матрица `ISSUE`, полнота/согласованность `OBJECT`, ссылки `fd-vault`.
  * Возвращает плоский список — по одной записи на ошибку, с именем файла.
- *
- * `opts.exclude` — имена файлов (с `.md`), которые не являются fd-файлами
- * (например, человеческое сырьё `issue-draft.md`) и не проверяются.
- *
- * `opts.vaultRoot` — корень vault: если задан, файлы из `fd-vault` проверяются
- * на существование; без него такие ссылки пропускаются (проверить нечем).
  */
-export interface TFdTaskCheckOptions {
-  exclude?: string[];
-  vaultRoot?: string;
-}
 
 export async function taskCheck(taskDir: string, opts: TFdTaskCheckOptions = {}): Promise<TFdTaskError[]> {
   const files = new FdTaskFile(taskDir);
