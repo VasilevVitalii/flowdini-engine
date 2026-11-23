@@ -296,4 +296,76 @@ body
     expect(brief.vault).toEqual(['gi/schema.md']);
     expect(brief.arcs.map((a) => a.addr)).toEqual(['ISSUE 1', 'ISSUE 2']);
   });
+
+  it('рулевой ISSUE от HUMAN перебивает vault из старых ISSUE', () => {
+    const spec = parseSpec('roles: {}\n');
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+[fd-vault:: a.md]
+
+body
+
+# ISSUE 2
+[fd-from:: HUMAN.CODER]
+[fd-to:: AI.ANALYST]
+
+сменить курс
+
+# ISSUE 3
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+[fd-vault:: b.md]
+
+body
+`);
+    // a.md из ISSUE 1 — до рулевого ISSUE 2 → перебит; b.md из ISSUE 3 — остаётся.
+    expect(roleBrief(spec, 'AI.CODER.JUNIOR', c).vault).toEqual(['b.md']);
+  });
+
+  it('без рулевого ISSUE vault накапливается по ISSUE к роли', () => {
+    const spec = parseSpec('roles: {}\n');
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+[fd-vault:: a.md]
+
+body
+
+# ISSUE 2
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+[fd-vault:: b.md]
+
+body
+`);
+    expect(roleBrief(spec, 'AI.CODER.JUNIOR', c).vault).toEqual(['a.md', 'b.md']);
+  });
+
+  it('vault остаётся у кодера на FIX (дуга ISSUE→CODER уже закрыта)', () => {
+    const spec = parseSpec('roles: {}\n');
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.ANALYST]
+[fd-to:: AI.CODER]
+[fd-vault:: a.md]
+
+body
+
+# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+[fd-reply:: [[#ISSUE 1]]]
+
+code
+
+# REVIEW 1
+[fd-from:: AI.REVIEWER]
+[fd-to:: AI.CODER.SENIOR]
+[fd-reply:: [[#CODE 1]]]
+
+review
+`);
+    // ISSUE 1 → CODER закрыт ответом CODE 1, но vault не должен пропадать на FIX.
+    expect(roleBrief(spec, 'AI.CODER.SENIOR', c).vault).toEqual(['a.md']);
+  });
 });

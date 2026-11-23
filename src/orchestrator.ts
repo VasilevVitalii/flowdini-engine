@@ -29,10 +29,9 @@ export interface TFdNextStep {
  * Состояние процесса — открытые дуги: топики с `fd-to`, не закрытые ни одним
  * `fd-reply` (внутри файла). Закрытие — по адресу топика (`L1#L2#L3`).
  */
-export function openArcs(content: TFdContent): TFdOpenArc[] {
-  // Рулевой ISSUE от HUMAN (`HUMAN.* → AI.ANALYST`) перебивает старые открытые дуги:
-  // всё, что было ДО последнего такого ISSUE, уже не актуально (курс сменился).
-  // Сам рулевой ISSUE и всё ПОСЛЕ него остаются в игре.
+/** Индекс последнего рулевого ISSUE от HUMAN (`HUMAN.*` в `fd-from`) или -1, если нет.
+ * Рулевой ISSUE перебивает всё, что было ДО него: и старые открытые дуги, и выданный ранее vault. */
+function steeringCutoff(content: TFdContent): number {
   let steerAt = -1;
   content.itemList.forEach((item, i) => {
     const l1 = item.topic.level1;
@@ -40,6 +39,12 @@ export function openArcs(content: TFdContent): TFdOpenArc[] {
     const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
     if (from.some((r) => roleCovers('HUMAN', r))) steerAt = i;
   });
+  return steerAt;
+}
+
+export function openArcs(content: TFdContent): TFdOpenArc[] {
+  // Рулевой ISSUE от HUMAN перебивает старые открытые дуги: всё ДО него не актуально.
+  const steerAt = steeringCutoff(content);
 
   // Все fd-reply: адрес → список fd-from ответивших (кто закрывает дугу).
   const replies = new Map<string, string[]>();
@@ -138,15 +143,18 @@ export interface TFdRoleBrief {
 export function roleBrief(spec: TFdSpecConfig, role: string, content: TFdContent): TFdRoleBrief {
   const roleSpec = resolveRole(spec, role);
   const arcs = openArcs(content).filter((a) => a.to.some((r) => roleCovers(r, role)));
+  // vault из ISSUE до рулевого ISSUE перебит так же, как и дуги: не виден последующим ролям.
+  const steerAt = steeringCutoff(content);
   const vault: string[] = [];
-  for (const item of content.itemList) {
+  content.itemList.forEach((item, i) => {
+    if (i < steerAt) return;
     const l1 = item.topic.level1;
-    if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) continue;
+    if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) return;
     const to = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
-    if (!to.some((r) => roleCovers(r, role))) continue;
+    if (!to.some((r) => roleCovers(r, role))) return;
     for (const f of item.topic.inlineList) {
       if (f.param === 'fd-vault') vault.push(...f.valueList);
     }
-  }
+  });
   return { role, spec: roleSpec, context: roleSpec.context ?? [], vault, arcs };
 }
