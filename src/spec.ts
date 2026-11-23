@@ -89,6 +89,12 @@ export function validateSpec(config: TFdSpecConfig): TFdSpecError[] {
     if (spec.budget !== undefined && (typeof spec.budget !== 'object' || spec.budget === null || Array.isArray(spec.budget))) {
       errors.push({ path: `roles.${role}.budget`, error: 'must be an object' });
     }
+    const budgetMaxTurns = spec.budget?.maxTurns;
+    if (budgetMaxTurns !== undefined) {
+      if (typeof budgetMaxTurns !== 'number' || !Number.isInteger(budgetMaxTurns) || budgetMaxTurns < 1) {
+        errors.push({ path: `roles.${role}.budget.maxTurns`, error: 'must be a positive integer' });
+      }
+    }
   }
   return errors;
 }
@@ -103,6 +109,10 @@ export function parseSpec(text: string): TFdSpecConfig {
     throw new Error('SPEC: корень должен быть объектом (mapping)');
   }
   const obj = raw as Record<string, unknown>;
+  const KNOWN_KEYS = new Set(['roles', 'reviewLimit', 'fixMode', 'fixReference']);
+  for (const key of Object.keys(obj)) {
+    if (!KNOWN_KEYS.has(key)) throw new Error(`SPEC: неизвестный ключ "${key}"`);
+  }
   const roles = obj.roles ?? {};
   if (typeof roles !== 'object' || roles === null || Array.isArray(roles)) {
     throw new Error('SPEC: roles должен быть объектом');

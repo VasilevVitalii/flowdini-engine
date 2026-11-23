@@ -172,7 +172,7 @@ function checkContent(
     if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) continue;
     const fromVals = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
     const toVals = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
-    if (fromVals.length === 0 || toVals.length === 0) continue;
+    if (fromVals.length === 0 || toVals.length === 0) continue; // контейнер или неполный акт — матрица не проверяет
     const from = fromVals[0];
     const to = toVals[0];
     const ok = ISSUE_ALLOWED.some(([pf, pt]) => roleCovers(pf, from) && roleCovers(pt, to));
@@ -187,7 +187,8 @@ function checkContent(
     const l2 = item.topic.level2;
     if (l2 === null || l2.title !== 'OBJECT' || item.topic.level3 !== null) continue;
     const fields = item.topic.inlineList;
-    const has = (p: string): boolean => fields.some((f) => f.param === p);
+    const has = (p: string): boolean =>
+      fields.some((f) => f.param === p && f.valueList.length > 0 && f.valueList.some((v) => v.trim() !== ''));
     const missing = ['obj-kind', 'obj-action', 'obj-path'].filter((p) => !has(p));
     if (missing.length > 0) {
       errors.push(`OBJECT incomplete: missing ${missing.join('/')} ("${levelText(l2)}")`);
@@ -219,8 +220,12 @@ function checkContent(
     const { level1, level2, level3 } = item.topic;
     if (level1?.title === 'REVIEW' && level2?.title === 'Q' && level3 === null) {
       const toVals = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
-      for (const v of toVals) {
-        if (!roleCovers('HUMAN.CODER', v)) errors.push(`gate Q must be to HUMAN.CODER: "${v}"`);
+      if (toVals.length === 0) {
+        errors.push('gate Q must have fd-to (HUMAN.CODER)');
+      } else {
+        for (const v of toVals) {
+          if (!roleCovers('HUMAN.CODER', v)) errors.push(`gate Q must be to HUMAN.CODER: "${v}"`);
+        }
       }
     }
   }

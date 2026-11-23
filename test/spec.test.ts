@@ -31,6 +31,10 @@ describe('parseSpec', () => {
   it('без reviewLimit — поле отсутствует', () => {
     expect(parseSpec('roles: {}\n').reviewLimit).toBeUndefined();
   });
+
+  it('неизвестный ключ верхнего уровня (опечатка) — бросает', () => {
+    expect(() => parseSpec('reviewlimit: 2\nroles: {}\n')).toThrow('неизвестный ключ "reviewlimit"');
+  });
 });
 
 describe('validateSpec', () => {
@@ -55,6 +59,11 @@ describe('validateSpec', () => {
   it('tools не массив строк — ошибка', () => {
     const errs = validateSpec({ roles: { 'AI.CODER': { tools: [1] as unknown as string[] } } });
     expect(errs).toEqual([{ path: 'roles.AI.CODER.tools', error: 'must be an array of strings' }]);
+  });
+
+  it('budget.maxTurns не целое — ошибка', () => {
+    const errs = validateSpec({ roles: { 'AI.CODER': { budget: { maxTurns: 'many' } } } });
+    expect(errs).toEqual([{ path: 'roles.AI.CODER.budget.maxTurns', error: 'must be a positive integer' }]);
   });
 
   it('роль без значения (null) — ошибка валидации, не TypeError', () => {

@@ -1,5 +1,5 @@
 import type { TFdContent, TFdItem, TFdLevel } from 'flowdini-spec';
-import { extractLinks, parseAddr, topicAddr } from './addr.js';
+import { extractLinks, parseAddr, topicAddr, topicFields } from './addr.js';
 import { roleCovers } from './role.js';
 import { contentPretty } from './pretty.js';
 
@@ -65,15 +65,13 @@ export function reviewFixIterations(content: TFdContent): number {
   const answered = new Set<string>();
   for (const item of content.itemList) {
     if (item.topic.level1 === null || item.topic.level1.title !== 'FIX') continue;
-    for (const f of item.topic.inlineList) {
-      if (f.param !== 'fd-reply') continue;
-      for (const v of f.valueList) {
-        for (const raw of extractLinks(v)) {
-          const p = parseAddr(raw);
-          if (p === null || p.filePath !== '' || p.parts.length === 0) continue;
-          const [title] = p.parts[0].split(' ');
-          if (title === 'REVIEW') answered.add(p.parts[0]);
-        }
+    if (item.topic.level2 !== null && item.topic.level2.title === 'A') continue; // ## A — ответ человека на Q, не FIX-итерация
+    for (const v of topicFields(item.topic, 'fd-reply')) {
+      for (const raw of extractLinks(v)) {
+        const p = parseAddr(raw);
+        if (p === null || p.filePath !== '' || p.parts.length === 0) continue;
+        const [title] = p.parts[0].split(' ');
+        if (title === 'REVIEW') answered.add(p.parts[0]);
       }
     }
   }
@@ -121,13 +119,10 @@ function itemsOfL2(content: TFdContent, l1: TFdLevel, l2: TFdLevel): TFdItem[] {
 function fixItemsFor(content: TFdContent, addr: string): TFdItem[] {
   return content.itemList.filter((item) => {
     if (item.topic.level1 === null || item.topic.level1.title !== 'FIX') return false;
-    for (const f of item.topic.inlineList) {
-      if (f.param !== 'fd-reply') continue;
-      for (const v of f.valueList) {
-        for (const raw of extractLinks(v)) {
-          const p = parseAddr(raw);
-          if (p !== null && p.filePath === '' && p.parts.join('#') === addr) return true;
-        }
+    for (const v of topicFields(item.topic, 'fd-reply')) {
+      for (const raw of extractLinks(v)) {
+        const p = parseAddr(raw);
+        if (p !== null && p.filePath === '' && p.parts.join('#') === addr) return true;
       }
     }
     return false;
@@ -204,8 +199,8 @@ export function acceptOf(content: TFdContent, arcAddr: string): boolean | null {
     if (topicAddr(item.topic) !== arcAddr) continue;
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'ANSWERS') return null;
-    const from = item.topic.inlineList.find((f) => f.param === 'fd-from');
-    if (from === undefined || !from.valueList.some((v) => roleCovers('HUMAN', v))) return null;
+    const from = topicFields(item.topic, 'fd-from');
+    if (!from.some((v) => roleCovers('HUMAN', v))) return null;
     return isAccept(item.text);
   }
   return null;

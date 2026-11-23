@@ -40,6 +40,26 @@ body
     ]);
   });
 
+  it('fd-to в теле (source body) не управляет дугами', () => {
+    const c = contentOf(`# ISSUE 1
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+# QUESTIONS 1
+
+## Q 1
+[fd-from:: AI.ANALYST]
+[fd-to:: HUMAN.ANALYST]
+
+Поле в теле, а не в свойствах:
+[fd-to:: AI.CODER]
+`);
+    expect(openArcs(c)).toEqual([
+      { addr: 'ISSUE 1', from: ['AI.WRITER'], to: ['AI.ANALYST'] },
+      { addr: 'QUESTIONS 1#Q 1', from: ['AI.ANALYST'], to: ['HUMAN.ANALYST'] },
+    ]);
+  });
+
   it('подтопики FIX → AI.REVIEWER открыты', () => {
     const c = contentOf(`# FIX 1
 
@@ -162,6 +182,50 @@ body3
 `);
     // Всё до ISSUE 4 (включая ISSUE 2 и CODE 3) перебито; осталась только ISSUE 4.
     expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 4']);
+  });
+
+  it('reply из прошлого (до топика) не закрывает дугу', () => {
+    const c = contentOf(`# ANSWERS 1
+
+## A 1
+[fd-from:: HUMAN.ANALYST]
+[fd-to:: AI.ANALYST]
+[fd-reply:: [[#QUESTIONS 1#Q 1]]]
+
+body
+
+# QUESTIONS 1
+
+## Q 1
+[fd-from:: AI.ANALYST]
+[fd-to:: HUMAN.ANALYST]
+
+body
+`);
+    // A 1 ссылается на Q 1, но стоит ДО него — причинный порядок не даёт закрыть Q 1.
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ANSWERS 1#A 1', 'QUESTIONS 1#Q 1']);
+  });
+
+  it('DONE перебивает старые открытые дуги (рубеж)', () => {
+    const c = contentOf(`# CODE 1
+[fd-from:: AI.CODER.JUNIOR]
+[fd-to:: AI.REVIEWER]
+
+body
+
+# DONE 1
+[fd-from:: HUMAN.ANALYST]
+
+closed
+
+# ISSUE 2
+[fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+reopen
+`);
+    // CODE 1 до DONE — перебит; ISSUE 2 после DONE — остаётся.
+    expect(openArcs(c).map((a) => a.addr)).toEqual(['ISSUE 2']);
   });
 });
 

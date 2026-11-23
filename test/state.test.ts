@@ -96,6 +96,21 @@ describe('reviewFixIterations', () => {
     ].join('\n');
     expect(reviewFixIterations(s(j))).toBe(0);
   });
+
+  it('## A (ответ человека на Q) без FIX-подзаголовка не считается итерацией', () => {
+    const j = [
+      '# ISSUE 1', '', 'b', '',
+      '# REVIEW 1', '',
+      '## Q 1',
+      '[fd-to:: HUMAN.CODER]',
+      '', 'продолжать?', '',
+      '# FIX 1', '',
+      '## A 1',
+      '[fd-from:: HUMAN.CODER] [fd-reply:: [[#REVIEW 1#Q 1]]]',
+      '', '+',
+    ].join('\n');
+    expect(reviewFixIterations(s(j))).toBe(0);
+  });
 });
 
 describe('isDone', () => {

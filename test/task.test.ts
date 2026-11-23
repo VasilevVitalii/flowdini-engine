@@ -286,6 +286,14 @@ describe('taskCheck: валидация OBJECT', () => {
       { relativeFileName: 'a.md', error: 'duplicate obj-path: "dbo.sp_x"' },
     ]);
   });
+
+  it('OBJECT с пустым obj-path — ошибка полноты', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n[obj-path:: ]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'OBJECT incomplete: missing obj-path ("OBJECT 1")' },
+    ]);
+  });
 });
 
 describe('taskCheck: fd-vault', () => {
@@ -333,6 +341,14 @@ describe('taskCheck: гибридный гейт', () => {
     await writeFile(join(dir, 'a.md'), '# REVIEW 1\n\n## Q 1\n[fd-to:: AI.CODER]\n\nпродолжать?\n');
     expect(await taskCheck(dir)).toEqual([
       { relativeFileName: 'a.md', error: 'gate Q must be to HUMAN.CODER: "AI.CODER"' },
+    ]);
+  });
+
+  it('Q без fd-to — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# REVIEW 1\n\n## Q 1\n\nпродолжать?\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'gate Q must have fd-to (HUMAN.CODER)' },
     ]);
   });
 });

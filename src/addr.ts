@@ -15,6 +15,17 @@ export function topicAddr(topic: TFdTopic): string {
   return parts.join('#');
 }
 
+/**
+ * Значения поля `param` только из СВОЙСТВ топика (`source: 'topic'` / преамбула),
+ * не из тела (`source: 'body'`): поле в теле — проза модели, оно НЕ управляет
+ * процессом (не создаёт/не закрывает дуги, не выдаёт vault).
+ */
+export function topicFields(topic: TFdTopic, param: string): string[] {
+  return topic.inlineList
+    .filter((f) => f.param === param && f.source !== 'body')
+    .flatMap((f) => f.valueList);
+}
+
 /** Распарсенный адрес ссылки `[[file#L1#L2#L3]]`. */
 export interface TFdAddr {
   /** Путь файла без `.md` (`''` — текущий файл). */

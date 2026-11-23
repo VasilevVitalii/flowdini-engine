@@ -1,5 +1,5 @@
 import type { TFdContent } from 'flowdini-spec';
-import { extractLinks, parseAddr, topicAddr } from './addr.js';
+import { extractLinks, parseAddr, topicAddr, topicFields } from './addr.js';
 import { roleCovers } from './role.js';
 import { resolveRole } from './spec.js';
 import type { TFdRoleSpec, TFdSpecConfig } from './spec.js';
@@ -25,18 +25,17 @@ export interface TFdNextStep {
   arc: TFdOpenArc;
 }
 
-/**
- * Состояние процесса — открытые дуги: топики с `fd-to`, не закрытые ни одним
- * `fd-reply` (внутри файла). Закрытие — по адресу топика (`L1#L2#L3`).
- */
 /** Индекс последнего рулевого ISSUE от HUMAN (`HUMAN.*` в `fd-from`) или -1, если нет.
  * Рулевой ISSUE перебивает всё, что было ДО него: и старые открытые дуги, и выданный ранее vault. */
 function steeringCutoff(content: TFdContent): number {
   let steerAt = -1;
   content.itemList.forEach((item, i) => {
     const l1 = item.topic.level1;
-    if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) return;
-    const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
+    if (l1 === null || item.topic.level2 !== null) return;
+    // DONE — терминальный рубеж: перебивает всё до него так же, как рулевой ISSUE.
+    if (l1.title === 'DONE') { steerAt = i; return; }
+    if (l1.title !== 'ISSUE') return;
+    const from = topicFields(item.topic, 'fd-from');
     if (from.some((r) => roleCovers('HUMAN', r))) steerAt = i;
   });
   return steerAt;
@@ -46,37 +45,30 @@ export function openArcs(content: TFdContent): TFdOpenArc[] {
   // Рулевой ISSUE от HUMAN перебивает старые открытые дуги: всё ДО него не актуально.
   const steerAt = steeringCutoff(content);
 
-  // Все fd-reply: адрес → список fd-from ответивших (кто закрывает дугу).
-  const replies = new Map<string, string[]>();
-  for (const item of content.itemList) {
-    const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
-    for (const f of item.topic.inlineList) {
-      if (f.param !== 'fd-reply') continue;
-      for (const v of f.valueList) {
-        for (const raw of extractLinks(v)) {
-          const p = parseAddr(raw);
-          if (p !== null && p.filePath === '') {
-            const addr = p.parts.join('#');
-            const arr = replies.get(addr) ?? [];
-            arr.push(...from);
-            replies.set(addr, arr);
-          }
-        }
-      }
-    }
-  }
   const arcs: TFdOpenArc[] = [];
   content.itemList.forEach((item, i) => {
-    if (i < steerAt) return; // перебито рулевым ISSUE от HUMAN
-    const to = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
+    if (i < steerAt) return; // перебито рулевым ISSUE от HUMAN (или DONE)
+    const to = topicFields(item.topic, 'fd-to');
     if (to.length === 0) return;
     const addr = topicAddr(item.topic);
     if (addr === '') return;
-    // Закрыта, только если ответил кто-то из адресатов (адресат покрывает ответившего).
-    const replyFrom = replies.get(addr) ?? [];
-    const answered = to.some((t) => replyFrom.some((rf) => roleCovers(t, rf)));
+    // Закрыта, только если ответил кто-то из адресатов (адресат покрывает ответившего)
+    // репликой ПОСЛЕ источника (причинный порядок: ответ из прошлого не закрывает
+    // новую дугу, ссылка на ещё не появившийся топик её не закрывает).
+    const answered = to.some((t) =>
+      content.itemList.slice(i + 1).some((later) => {
+        const from = topicFields(later.topic, 'fd-from');
+        if (!from.some((rf) => roleCovers(t, rf))) return false;
+        return topicFields(later.topic, 'fd-reply').some((v) =>
+          extractLinks(v).some((raw) => {
+            const p = parseAddr(raw);
+            return p !== null && p.filePath === '' && p.parts.join('#') === addr;
+          }),
+        );
+      }),
+    );
     if (answered) return;
-    const from = item.topic.inlineList.filter((f) => f.param === 'fd-from').flatMap((f) => f.valueList);
+    const from = topicFields(item.topic, 'fd-from');
     arcs.push({ addr, from, to });
   });
   return arcs;
@@ -152,11 +144,9 @@ export function roleBrief(spec: TFdSpecConfig, role: string, content: TFdContent
     if (i < steerAt) return;
     const l1 = item.topic.level1;
     if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) return;
-    const to = item.topic.inlineList.filter((f) => f.param === 'fd-to').flatMap((f) => f.valueList);
+    const to = topicFields(item.topic, 'fd-to');
     if (!to.some((r) => roleCovers(r, role))) return;
-    for (const f of item.topic.inlineList) {
-      if (f.param === 'fd-vault') vault.push(...f.valueList);
-    }
+    vault.push(...topicFields(item.topic, 'fd-vault'));
   });
   return { role, spec: roleSpec, context: roleSpec.context ?? [], vault, arcs };
 }

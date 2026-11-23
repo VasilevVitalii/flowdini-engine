@@ -49,7 +49,8 @@ export function extractDbObjects(content: TFdContent): TFdDbObject[] {
     const objKind = get('obj-kind');
     const objAction = get('obj-action');
     if (objPath === undefined || objKind === undefined || objAction === undefined) continue;
-    objects.push({ objPath, objKind, objAction: objAction as TFdDbObject['objAction'] });
+    if (objAction !== 'create' && objAction !== 'edit') continue; // невалидный action ловит taskCheck
+    objects.push({ objPath, objKind, objAction });
   }
   return objects;
 }
