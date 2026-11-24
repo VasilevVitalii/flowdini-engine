@@ -141,6 +141,40 @@ describe('reviewFixIterations', () => {
     ].join('\n');
     expect(reviewFixIterations(s(j))).toBe(0);
   });
+
+  it('поздний корректный FIX не заслоняется ранним (стоящим ДО REVIEW)', () => {
+    const j = [
+      '# ISSUE 1', '', 'b', '',
+      '# FIX 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.CODER.SENIOR] [fd-to:: AI.REVIEWER] [fd-reply:: [[#REVIEW 1#BUG 1]]]',
+      '', 'early', '',
+      '# REVIEW 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug', '',
+      '# FIX 2', '',
+      '## BUG 1',
+      '[fd-from:: AI.CODER.SENIOR] [fd-to:: AI.REVIEWER] [fd-reply:: [[#REVIEW 1#BUG 1]]]',
+      '', 'fixed',
+    ].join('\n');
+    expect(reviewFixIterations(s(j))).toBe(1);
+  });
+
+  it('FIX на несуществующий подзаголовок REVIEW — не засчитывается', () => {
+    const j = [
+      '# ISSUE 1', '', 'b', '',
+      '# REVIEW 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug', '',
+      '# FIX 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.CODER.SENIOR] [fd-to:: AI.REVIEWER] [fd-reply:: [[#REVIEW 1#BUG 9]]]',
+      '', 'fixed',
+    ].join('\n');
+    expect(reviewFixIterations(s(j))).toBe(0);
+  });
 });
 
 describe('isDone', () => {
@@ -211,6 +245,22 @@ describe('fixReference', () => {
 
   it('другой тип подзаголовка — только свои предыдущие (их нет → пусто)', () => {
     expect(fixReference(s(journal), 'REVIEW 1#RISK 3')).toBe('');
+  });
+
+  it('отбирает предыдущие по позиции в документе, а не по номеру', () => {
+    const j = [
+      '# REVIEW 1', '',
+      '## BUG 2',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'первое по порядку (номер 2)', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'второе по порядку (номер 1)',
+    ].join('\n');
+    const r = fixReference(s(j), 'REVIEW 1#BUG 1');
+    expect(r).toContain('Замечание «BUG 2»');
+    expect(r).toContain('первое по порядку (номер 2)');
+    expect(r).not.toContain('второе по порядку (номер 1)');
   });
 
   it('детерминирован: использует переданный now для fd-createdAt', () => {

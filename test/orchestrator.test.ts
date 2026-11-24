@@ -298,7 +298,7 @@ closed
     expect(nextStep(c)).toBeNull();
   });
 
-  it('DONE + переоткрытие (ISSUE после) — ход есть', () => {
+  it('DONE + переоткрытие от не-HUMAN — ход не даём (битый журнал)', () => {
     const c = contentOf(`# DONE 1
 [fd-from:: HUMAN.ANALYST]
 
@@ -306,6 +306,21 @@ closed
 
 # ISSUE 2
 [fd-from:: AI.WRITER]
+[fd-to:: AI.ANALYST]
+
+reopen
+`);
+    expect(nextStep(c)).toBeNull();
+  });
+
+  it('DONE + переоткрытие от HUMAN — ход есть', () => {
+    const c = contentOf(`# DONE 1
+[fd-from:: HUMAN.ANALYST]
+
+closed
+
+# ISSUE 2
+[fd-from:: HUMAN.CODER]
 [fd-to:: AI.ANALYST]
 
 reopen

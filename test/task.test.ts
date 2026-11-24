@@ -135,6 +135,12 @@ chat.md: broken link: "[[#ISSUE 9]]"
     ]);
   });
 
+  it('пустой внутрифайловый якорь [[#]] — не битая ссылка (текущий файл целиком)', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# Q 1\n\n## Q 1\n[fd-reply:: [[#]]]\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+  });
+
   it('ссылка на отсутствующий файл', async () => {
     const dir = await tmp();
     await writeFile(join(dir, 'a.md'), '# Q 1\n\n## Q 1\n[fd-reply:: [[ghost#D 1]]]\nbody\n');
@@ -289,6 +295,14 @@ describe('taskCheck: матрица ISSUE', () => {
       { relativeFileName: 'a.md', error: 'invalid ISSUE transfer: "AI.ANALYST" → "HUMAN.CODER"' },
     ]);
   });
+
+  it('ISSUE с адресатом, но без отправителя — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n[fd-to:: AI.ANALYST]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'ISSUE must have fd-from' },
+    ]);
+  });
 });
 
 describe('taskCheck: валидация OBJECT', () => {
@@ -319,6 +333,38 @@ describe('taskCheck: валидация OBJECT', () => {
     await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody1\n\n## OBJECT 2\n[obj-kind:: procedure]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody2\n');
     expect(await taskCheck(dir)).toEqual([
       { relativeFileName: 'a.md', error: 'duplicate obj-path: "dbo.sp_x"' },
+    ]);
+  });
+
+  it('несколько obj-kind — ошибка кардинальности', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function, procedure]\n[obj-action:: create]\n[obj-path:: dbo.sp_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'OBJECT must have exactly one obj-kind ("OBJECT 1")' },
+    ]);
+  });
+
+  it('несколько obj-action — ошибка кардинальности', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create, edit]\n[obj-path:: dbo.sp_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'OBJECT must have exactly one obj-action ("OBJECT 1")' },
+    ]);
+  });
+
+  it('неподдерживаемый obj-kind — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: table]\n[obj-action:: create]\n[obj-path:: dbo.t_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'invalid obj-kind: "table"' },
+    ]);
+  });
+
+  it('obj-path с пустым сегментом — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# ISSUE 1\n\n## OBJECT 1\n[obj-kind:: function]\n[obj-action:: create]\n[obj-path:: dbo..sp_x]\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'invalid obj-path: "dbo..sp_x"' },
     ]);
   });
 

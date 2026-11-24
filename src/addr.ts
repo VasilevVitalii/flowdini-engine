@@ -49,14 +49,16 @@ export function extractLinks(text: string): string[] {
  * Распарсить содержимое `[[...]]` (без скобок): `#L1#L2` → `{ filePath: '', parts: ['L1','L2'] }`,
  * `file#L1#L2` → `{ filePath: 'file', parts: ['L1','L2'] }`. Ссылку без `#` (на файл целиком)
  * возвращает `{ filePath: raw, parts: [] }` — адрес заголовка пуст, проверяется существование файла.
+ * Хвостовой `#` (пустой якорь) сводится к ссылке на файл целиком: пустые части в конце
+ * отбрасываются (`[[file#]]` ≡ `[[file]]`, `[[#]]` ≡ текущий файл целиком). Пустые части
+ * в середине (`[[#L1##L3]]`) сохраняются — двойной `#` не маскируется.
  */
 export function parseAddr(raw: string): TFdAddr | null {
   const hash = raw.indexOf('#');
   if (hash === -1) return { filePath: raw, parts: [] };
-  return {
-    filePath: raw.slice(0, hash),
-    parts: raw.slice(hash + 1).split('#'),
-  };
+  const parts = raw.slice(hash + 1).split('#');
+  while (parts.length > 0 && parts[parts.length - 1] === '') parts.pop();
+  return { filePath: raw.slice(0, hash), parts };
 }
 
 /** Индекс адресов проекта: путь файла (без `.md`) → множество адресов `L1#L2#L3`. */

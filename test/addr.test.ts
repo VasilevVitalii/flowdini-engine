@@ -21,6 +21,11 @@ describe('parseAddr', () => {
   it('пустые компоненты сохраняются (двойной `#` не маскируется)', () => {
     expect(parseAddr('#L1 1##L3 1')).toEqual({ filePath: '', parts: ['L1 1', '', 'L3 1'] });
   });
+
+  it('хвостовой `#` (пустой якорь) — ссылка на файл целиком', () => {
+    expect(parseAddr('#')).toEqual({ filePath: '', parts: [] });
+    expect(parseAddr('example1#')).toEqual({ filePath: 'example1', parts: [] });
+  });
 });
 
 describe('buildIndex + makeResolver', () => {

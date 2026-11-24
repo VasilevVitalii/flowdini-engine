@@ -39,7 +39,7 @@ export interface TFdDbError {
 }
 
 /** Валидные `obj-kind` (кодеру даём procedure/function/view, DDL таблиц — человек). */
-const VALID_KINDS = new Set(['procedure', 'function', 'view']);
+export const VALID_KINDS = new Set(['procedure', 'function', 'view']);
 
 /**
  * Вытащить объекты БД из `## OBJECT`-топиков журнала. Неполные `OBJECT`
@@ -52,11 +52,13 @@ export function extractDbObjects(content: TFdContent): TFdDbObject[] {
     if (l2 === null || l2.title !== 'OBJECT' || item.topic.level3 !== null) continue;
     // Читаем только свойства топика (не тело): поле в прозе не объявляет объект.
     const objPaths = topicFields(item.topic, 'obj-path');
-    const objKind = topicFields(item.topic, 'obj-kind')[0];
-    const objAction = topicFields(item.topic, 'obj-action')[0];
-    if (objPaths.length === 0 || objKind === undefined || objAction === undefined) continue;
+    const kinds = topicFields(item.topic, 'obj-kind').filter((v) => v.trim() !== '');
+    const actions = topicFields(item.topic, 'obj-action').filter((v) => v.trim() !== '');
+    // Ровно один kind/action: конфликтные (`[obj-kind:: a, b]`) пропускаем — их ловит
+    // `taskCheck`; молча брать первое значение было бы расхождением с валидатором.
+    if (objPaths.length === 0 || kinds.length !== 1 || actions.length !== 1) continue;
     for (const objPath of objPaths) {
-      objects.push({ objPath, objKind, objAction });
+      objects.push({ objPath, objKind: kinds[0], objAction: actions[0] });
     }
   }
   return objects;

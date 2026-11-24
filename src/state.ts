@@ -54,15 +54,36 @@ export function sections(content: TFdContent): TFdSection[] {
 /**
  * Число завершённых итераций REVIEW→FIX с последнего прерывания
  * (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают счётчик). Итерация = REVIEW, на который
- * есть FIX-ответ, стоящий ПОСЛЕ него в документе и ссылающийся на его ПОДЗАГОЛОВОК
- * (`REVIEW N#BUG k`), а не на контейнер. Автора не проверяем — `fd-from` ставит хост.
+ * есть FIX-ответ, стоящий ПОСЛЕ целевого ПОДЗАГОЛОВКА в документе (`REVIEW N#BUG k`)
+ * и ссылающийся на существующий подзаголовок, а не на контейнер. Автора не
+ * проверяем — `fd-from` ставит хост.
  * Считаем по REVIEW, а не по FIX, чтобы `fixMode: item` (несколько FIX на один
  * REVIEW) не завышал порог: цикл «REVIEW → все его фиксы» — одна итерация.
- * Одинокий REVIEW без FIX (или FIX только на контейнер, или FIX до REVIEW) счётчик не двигает.
+ * Одинокий REVIEW без FIX (или FIX только на контейнер, или FIX до цели, или на
+ * несуществующий подзаголовок) счётчик не двигает.
  * Производное состояние журнала: порог — настройка SPEC, счётчик в md не хранится.
  */
 export function reviewFixIterations(content: TFdContent): number {
-  // `answered`: ключ REVIEW (L1) → минимальный индекс FIX-ответа на его подзаголовок.
+  // Позиция первого item каждого подзаголовка REVIEW и его подзаголовки:
+  // `subPos: REVIEW n#BUG k → индекс` (для проверки «FIX после цели»),
+  // `subs: REVIEW n → { BUG k, ... }` (для сверки существования цели ответа).
+  const subPos = new Map<string, number>();
+  const subs = new Map<string, Set<string>>();
+  content.itemList.forEach((item, i) => {
+    const l1 = item.topic.level1;
+    const l2 = item.topic.level2;
+    if (l1 === null || l1.title !== 'REVIEW' || l2 === null) return;
+    const l1key = `${l1.title} ${l1.idx}`;
+    const subKey = `${l2.title} ${l2.idx}`;
+    let s = subs.get(l1key);
+    if (s === undefined) { s = new Set(); subs.set(l1key, s); }
+    s.add(subKey);
+    const full = `${l1key}#${subKey}`;
+    if (!subPos.has(full)) subPos.set(full, i);
+  });
+
+  // `answered`: `REVIEW n#BUG k` → максимальный индекс FIX-ответа ПОСЛЕ цели.
+  // Максимум (а не первый) — поздний корректный FIX не заслоняется ранним битым.
   const answered = new Map<string, number>();
   content.itemList.forEach((item, i) => {
     if (item.topic.level1 === null || item.topic.level1.title !== 'FIX') return;
@@ -71,15 +92,18 @@ export function reviewFixIterations(content: TFdContent): number {
       for (const raw of extractLinks(v)) {
         const p = parseAddr(raw);
         if (p === null || p.filePath !== '' || p.parts.length < 2) continue;
-        const [title] = p.parts[0].split(' ');
-        if (title !== 'REVIEW') continue;
-        if (!answered.has(p.parts[0])) answered.set(p.parts[0], i);
+        const addr = p.parts.join('#');
+        const targetPos = subPos.get(addr);
+        if (targetPos === undefined) continue; // цель не существует — не ответ на замечание
+        if (i <= targetPos) continue; // FIX не после целевого подтопика — не ответ
+        answered.set(addr, Math.max(answered.get(addr) ?? -1, i));
       }
     }
   });
+
   let count = 0;
   const seen = new Set<string>();
-  content.itemList.forEach((item, i) => {
+  content.itemList.forEach((item) => {
     const l1 = item.topic.level1;
     if (l1 === null) return;
     const key = `${l1.title} ${l1.idx}`;
@@ -89,11 +113,16 @@ export function reviewFixIterations(content: TFdContent): number {
       case 'DONE':
         count = 0;
         break;
-      case 'REVIEW':
+      case 'REVIEW': {
         if (seen.has(key)) break;
         seen.add(key);
-        if ((answered.get(key) ?? -1) > i) count += 1;
+        const subsOf = subs.get(key);
+        if (subsOf === undefined) break;
+        for (const sub of subsOf) {
+          if ((answered.get(`${key}#${sub}`) ?? -1) >= 0) { count += 1; break; }
+        }
         break;
+      }
     }
   });
   return count;
@@ -141,8 +170,9 @@ function fixItemsFor(content: TFdContent, addr: string): TFdItem[] {
  * Справка кодеру для `fixMode: item`: предыдущие пункты этого REVIEW
  * (замечание целиком) и ответы кодера на них (фикс целиком), в порядке
  * документа. `arcAddr` — адрес текущей дуги (`REVIEW 1#BUG 3`); берутся
- * подзаголовки того же типа (`BUG`) с меньшим номером. Для L1-дуги или не-REVIEW
- * возвращает `''` (справки нет).
+ * подзаголовки того же типа (`BUG`), стоящие РАНЬШЕ цели в документе (позиция,
+ * а не номер — нумерация замечаний может не совпадать с порядком). Для L1-дуги
+ * или не-REVIEW возвращает `''` (справки нет).
  */
 export function fixReference(
   content: TFdContent,
@@ -160,14 +190,29 @@ export function fixReference(
   const l2Idx = Number(l2m[2]);
   if (l1Title !== 'REVIEW') return '';
 
+  // Позиция первого item целевого подзаголовка в документе. «Предыдущие» пункты
+  // отбираются по позиции, а не по номеру: нумерация замечаний может не совпадать
+  // с порядком их появления в REVIEW.
+  let targetPos = -1;
+  for (let i = 0; i < content.itemList.length; i++) {
+    const t = content.itemList[i].topic;
+    if (
+      t.level1 !== null && t.level1.title === l1Title && t.level1.idx === l1Idx &&
+      t.level2 !== null && t.level2.title === l2Title && t.level2.idx === l2Idx
+    ) {
+      targetPos = i;
+      break;
+    }
+  }
+  if (targetPos === -1) return '';
+
   const l1: TFdLevel = { title: l1Title, idx: l1Idx };
   const seen = new Set<string>();
   const prev: TFdLevel[] = [];
-  for (const item of content.itemList) {
-    const t = item.topic;
+  for (let i = 0; i < targetPos; i++) {
+    const t = content.itemList[i].topic;
     if (t.level1 === null || t.level1.title !== l1Title || t.level1.idx !== l1Idx) continue;
-    if (t.level2 === null) continue;
-    if (t.level2.title !== l2Title || t.level2.idx >= l2Idx) continue;
+    if (t.level2 === null || t.level2.title !== l2Title) continue;
     const key = `${t.level2.title}\u0000${t.level2.idx}`;
     if (seen.has(key)) continue;
     seen.add(key);

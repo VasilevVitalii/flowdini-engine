@@ -3,6 +3,7 @@ import { resolve, sep } from 'node:path';
 import { FdTaskFile, textToStructure, stripFences } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
 import { buildIndex, extractLinks, levelText, makeResolver, parseAddr, topicAddr, topicFields } from './addr.js';
+import { VALID_KINDS } from './db.js';
 import { roleCovers } from './role.js';
 import { level1List, sections } from './state.js';
 
@@ -139,7 +140,8 @@ function checkContent(
       if (parsed === null) continue;
       const addr = parsed.parts.join('#');
       if (parsed.filePath === '') {
-        if (!validAddrs.has(addr)) broken.add(`broken link: "[[${raw}]]"`);
+        // Пустой внутрифайловый якорь (`[[#]]`) — ссылка на текущий файл целиком, не broken.
+        if (addr !== '' && !validAddrs.has(addr)) broken.add(`broken link: "[[${raw}]]"`);
       } else if (!resolveExternal(parsed.filePath, addr)) {
         broken.add(`broken link: "[[${raw}]]"`);
       }
@@ -200,7 +202,13 @@ function checkContent(
     if (l1 === null || l1.title !== 'ISSUE' || item.topic.level2 !== null) continue;
     const fromVals = topicFields(item.topic, 'fd-from');
     const toVals = topicFields(item.topic, 'fd-to');
-    if (fromVals.length === 0 || toVals.length === 0) continue; // контейнер или неполный акт — матрица не проверяет
+    // Односторонний акт (адресат без отправителя) — неполная передача: открывает
+    // дугу без отправителя. Контейнер (без обоих) матрица не проверяет.
+    if (fromVals.length === 0 && toVals.length > 0) {
+      errors.push('ISSUE must have fd-from');
+      continue;
+    }
+    if (fromVals.length === 0 || toVals.length === 0) continue;
     for (const from of fromVals) {
       for (const to of toVals) {
         const ok = ISSUE_ALLOWED.some(([pf, pt]) => roleCovers(pf, from) && roleCovers(pt, to));
@@ -217,22 +225,32 @@ function checkContent(
     const l2 = item.topic.level2;
     if (l2 === null || l2.title !== 'OBJECT' || item.topic.level3 !== null) continue;
     // Свойства топика, не тело: поле в прозе не объявляет объект плана.
-    const kindVals = topicFields(item.topic, 'obj-kind');
-    const actionVals = topicFields(item.topic, 'obj-action');
-    const pathVals = topicFields(item.topic, 'obj-path');
-    const nonEmpty = (vs: string[]): boolean => vs.some((v) => v.trim() !== '');
+    const kindVals = topicFields(item.topic, 'obj-kind').filter((v) => v.trim() !== '');
+    const actionVals = topicFields(item.topic, 'obj-action').filter((v) => v.trim() !== '');
+    const pathVals = topicFields(item.topic, 'obj-path').filter((v) => v.trim() !== '');
     const missing = [
-      nonEmpty(kindVals) ? null : 'obj-kind',
-      nonEmpty(actionVals) ? null : 'obj-action',
-      nonEmpty(pathVals) ? null : 'obj-path',
+      kindVals.length > 0 ? null : 'obj-kind',
+      actionVals.length > 0 ? null : 'obj-action',
+      pathVals.length > 0 ? null : 'obj-path',
     ].filter((p): p is string => p !== null);
     if (missing.length > 0) {
       errors.push(`OBJECT incomplete: missing ${missing.join('/')} ("${levelText(l2)}")`);
+    }
+    // Ровно один kind/action: несколько значений — конфликт, «первое» не берём.
+    if (kindVals.length > 1) errors.push(`OBJECT must have exactly one obj-kind ("${levelText(l2)}")`);
+    if (actionVals.length > 1) errors.push(`OBJECT must have exactly one obj-action ("${levelText(l2)}")`);
+    for (const v of kindVals) {
+      if (!VALID_KINDS.has(v)) errors.push(`invalid obj-kind: "${v}"`);
     }
     for (const v of actionVals) {
       if (v !== 'create' && v !== 'edit') errors.push(`invalid obj-action: "${v}"`);
     }
     for (const v of pathVals) {
+      // Пустой сегмент (`dbo.`, `.sp`, `dbo..sp`) — не валидный путь БД-объекта.
+      if (v.split('.').some((seg) => seg.trim() === '')) {
+        errors.push(`invalid obj-path: "${v}"`);
+        continue;
+      }
       if (objPaths.has(v)) errors.push(`duplicate obj-path: "${v}"`);
       else objPaths.add(v);
     }

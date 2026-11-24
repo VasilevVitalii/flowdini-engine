@@ -57,6 +57,17 @@ body
 `);
     expect(extractDbObjects(c)).toEqual([]);
   });
+
+  it('несколько obj-kind (конфликт) — OBJECT пропускается', () => {
+    const c = contentOf(`# ISSUE 1
+
+## OBJECT 1
+[obj-kind:: function, procedure] [obj-action:: create] [obj-path:: dbo.f_a]
+
+body
+`);
+    expect(extractDbObjects(c)).toEqual([]);
+  });
 });
 
 describe('validateDbObject', () => {

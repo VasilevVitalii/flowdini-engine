@@ -1,4 +1,4 @@
-import { inlineFieldToText, levelToText, topicHeading } from 'flowdini-spec';
+import { inlineFieldToText, levelToText, preambleToText, topicHeading } from 'flowdini-spec';
 import type { TFdContent, TFdInlineField, TFdItem } from 'flowdini-spec';
 
 /** Текущее время в UTC (ISO) для канона `fd-createdAt` (`YYYY-MM-DDTHH:MM:SSZ`). */
@@ -85,10 +85,10 @@ function prettyItem(item: TFdItem, now: () => Date): string {
  */
 export function contentPretty(content: TFdContent, now: () => Date = () => new Date()): string {
   const segments: string[] = [];
-  const preamble: string[] = [];
-  if (content.text !== null) preamble.push(content.text.trimEnd());
-  for (const field of content.inlineList) preamble.push(inlineFieldToText(field));
-  if (preamble.length > 0) segments.push(preamble.join('\n'));
+  // Преамбула — точный порядок из `preamble` (парсер заполняет сегментами), иначе
+  // откат на `text` + `inlineList` (структуры, собранные вручную).
+  const preamble = preambleToText(content).trimEnd();
+  if (preamble !== '') segments.push(preamble);
   for (const item of content.itemList) {
     const s = prettyItem(item, now);
     if (s !== '') segments.push(s);

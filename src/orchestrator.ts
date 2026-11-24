@@ -3,7 +3,7 @@ import { extractLinks, parseAddr, topicAddr, topicFields } from './addr.js';
 import { roleCovers } from './role.js';
 import { resolveRole } from './spec.js';
 import type { TFdRoleSpec, TFdSpecConfig } from './spec.js';
-import { reviewFixIterations, isCrashed, isDone } from './state.js';
+import { level1List, reviewFixIterations, isCrashed, isDone } from './state.js';
 
 /** Открытая дуга: топик с `fd-to`, на который ещё никто не ответил (`fd-reply`). */
 export interface TFdOpenArc {
@@ -93,6 +93,28 @@ function sectionFor(arc: TFdOpenArc): string | null {
 }
 
 /**
+ * Переоткрытие после DONE валидно: первый L1-раздел после DONE — ISSUE, чей
+ * `fd-from` покрывается HUMAN. Иначе журнал битый (taskCheck ругает «section
+ * after DONE» / «non-HUMAN reopen») — ход не даём, чтобы планировщик не
+ * продолжал то, что валидатор отверг.
+ */
+function reopenAfterDoneIsValid(content: TFdContent): boolean {
+  const l1s = level1List(content);
+  const doneIdx = l1s.findIndex((l) => l.title === 'DONE');
+  if (doneIdx === -1) return true; // DONE нет — обычный ход
+  const reopen = l1s[doneIdx + 1];
+  if (reopen === undefined) return true; // за DONE ничего нет (isDone уже бы сработал)
+  if (reopen.title !== 'ISSUE') return false; // после DONE что-то кроме переоткрывающего ISSUE
+  for (const item of content.itemList) {
+    const l1 = item.topic.level1;
+    if (l1 !== null && l1.title === reopen.title && l1.idx === reopen.idx && item.topic.level2 === null) {
+      if (topicFields(item.topic, 'fd-from').some((r) => roleCovers('HUMAN', r))) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Следующий ход: среди открытых дуг HUMAN-дуги приоритетнее (гибридный гейт —
  * пока человек не ответил, AI не приступает), иначе первая AI-дуга по порядку.
  * `null` — открытых ожиданий нет (таск завершён или затор).
@@ -100,6 +122,7 @@ function sectionFor(arc: TFdOpenArc): string | null {
 export function nextStep(content: TFdContent): TFdNextStep | null {
   if (isCrashed(content)) return null; // CRASH — терминальный маркер аварии, ход не даём
   if (isDone(content)) return null; // DONE — терминальный рубеж; переоткрытие — новый HUMAN ISSUE
+  if (!reopenAfterDoneIsValid(content)) return null; // битый журнал после DONE — ход не даём
   const arcs = openArcs(content);
   if (arcs.length === 0) return null;
   const human = arcs.filter((a) => a.to.some((r) => roleCovers('HUMAN', r)));
