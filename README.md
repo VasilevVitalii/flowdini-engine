@@ -106,7 +106,7 @@ const { manifestPath, files } = await captureSnapshot('/path/to/task', 2, [
 Декларативный контракт исполнения проекта — YAML-файл `fd.spec.yaml` (один на проект, в корне). Движок читает его и раздаёт ролям оси исполнения; сам инструменты не держит (матрица MCP — данные SPEC, не ядро).
 
 ```yaml
-reviewLimit: 2          # порог итераций REVIEW→FIX; после него в REVIEW идёт ## Q к HUMAN.CODER
+reviewLimit: 2          # порог итераций REVIEW→FIX; после него в REVIEW идёт ## Q к HUMAN.CODER (0 — гейт с первого REVIEW)
 fixMode: item           # item (дефолт): отдельный FIX на замечание; bulk: один FIX на все
 fixReference: false     # при fixMode: item — подавать кодеру справку (предыдущие пункты + ответы)
 
@@ -138,7 +138,7 @@ API:
 - `validateSpec(config)` — `TFdSpecError[]`: нотация роли (`KIND.FUNC[.INSTANCE]`, 2–3 сегмента), типы полей, `reviewLimit` (целое ≥ 0), `fixMode` (`bulk`|`item`), `budget.maxTurns` (целое ≥ 1);
 - `resolveRole(config, role)` — резолв оси с наследованием: `AI.CODER.SENIOR` наследует `tools`/`rights`/`budget`/`context` от `AI.CODER` и перекрывает `model`; массивы заменяются целиком, не конкатенируются.
 
-Поля роли: `model` (модель), `tools` (матрица MCP «роль → инструменты»), `rights` (что можно: read-only, DDL-виды, vault), `budget` (лимиты, в т.ч. `maxTurns` — лимит tool-calling ходов), `context` (SPEC-биндинги). Все опциональны; `reviewLimit` не задан → гейт `## Q` выключен; `fixMode` не задан → `item` (дефолт в драйвере, парсер копирует поле только если задано).
+Поля роли: `model` (модель), `tools` (матрица MCP «роль → инструменты»), `rights` (что можно: read-only, DDL-виды, vault), `budget` (лимиты, в т.ч. `maxTurns` — лимит tool-calling ходов), `context` (SPEC-биндинги). Все опциональны; `reviewLimit` не задан → гейт `## Q` выключен; `reviewLimit: 0` → гейт с первого REVIEW; `fixMode` не задан → `item` (дефолт в драйвере, парсер копирует поле только если задано).
 
 ### Оркестратор (`orchestrator.ts`)
 
