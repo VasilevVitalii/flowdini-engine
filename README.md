@@ -47,7 +47,7 @@ const errors = await taskCheck('/path/to/task', { exclude: ['issue-draft.md', 'i
 
 Текст преамбулы (`content.text`) выводится перед полями преамбулы (`inlineList`); перед первым заголовком — одна пустая строка.
 
-`fd-createdAt` создаётся только у топиков-сообщений (есть `fd-from`) с телом и только если его нет в свойствах; объектные описания (`obj-*`) без `fd-from` метку времени не получают. Формат — UTC ISO (`YYYY-MM-DDTHH:MM:SSZ`). Необязательный `now: () => Date` задаёт источник времени для детерминированного вывода (тесты, кеш); по умолчанию — текущее время.
+`fd-createdAt` создаётся только у топиков-сообщений (есть `fd-from`) с телом и только если его нет ни в одном поле топика (проверка по всем индексированным полям, включая тело, — иначе продублируется); объектные описания (`obj-*`) без `fd-from` метку времени не получают. Формат — UTC ISO (`YYYY-MM-DDTHH:MM:SSZ`). Необязательный `now: () => Date` задаёт источник времени для детерминированного вывода (тесты, кеш); по умолчанию — текущее время.
 
 ### Адресация
 
@@ -79,12 +79,16 @@ const errors = await taskCheck('/path/to/task', { exclude: ['issue-draft.md', 'i
 
 - `level1List(content)` — заголовки уровня 1 в порядке появления;
 - `sections(content)` — секции уровня 1 с их подзаголовками уровня 2;
-- `reviewFixIterations(content)` — число непрерывных `REVIEW` с последнего прерывания (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают). Порог итераций — настройка SPEC; движок лишь считает счётчик;
+- `reviewFixIterations(content)` — число `REVIEW`, на которые кодер ответил `FIX` (по `fd-reply` из `FIX`; `## A` — ответ человека на `Q`, не итерация), с последнего прерывания (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают). Порог итераций — настройка SPEC; движок лишь считает счётчик;
 - `isDone(content)` — таск завершён: последний раздел — `# DONE n`.
+- `isCrashed(content)` — в журнале есть `# CRASH n` (терминальный маркер аварии, процесс стоит);
+- `isAccept(text)` — тело ровно `+` после trim (детерминированный accept человека);
+- `acceptOf(content, arcAddr)` — accept дуги-ответа человека (`ANSWERS n#A m`, `fd-from` HUMAN.*): `true` (тело `+`) / `false` (иной ответ) / `null` (дуга не ответ человека);
+- `fixReference(content, arcAddr, now?)` — справка кодеру для `fixMode: item`: предыдущие пункты этого `REVIEW` + ответы кодера на них (в порядке документа); `now` — источник времени для детерминированного вывода.
 
 ### Снапшот определений (`snapshot.ts`)
 
-`captureSnapshot(taskDir, iteration, objects)` пишет `<taskDir>/snapshots/<iteration>/<objPath>.sql` и `manifest.json` (sha256 каждого файла + таймстамп). Движок сам в БД не ходит: определения получает MCP-агент (`get_definition`), движок фиксирует готовый текст. Снапшот read-only; дифф между итерациями и сверка с живой БД — по манифесту.
+`captureSnapshot(taskDir, iteration, objects, now?)` пишет `<taskDir>/snapshots/<iteration>/<objPath>.sql` и `manifest.json` (sha256 каждого файла + таймстамп). `iteration` — положительное целое или `'baseline'` (иначе отклоняется); имя файла — `safeName(objPath)` (инъективное, без коллизий `dbo.sp x` vs `dbo.sp_x`); `now` — ISO-таймстамп снимка (по умолчанию — текущее время). Движок сам в БД не ходит: определения получает MCP-агент (`get_definition`), движок фиксирует готовый текст. Снапшот read-only; дифф между итерациями и сверка с живой БД — по манифесту.
 
 ```ts
 import { captureSnapshot } from 'flowdini-engine';
@@ -100,6 +104,8 @@ const { manifestPath, files } = await captureSnapshot('/path/to/task', 2, [
 
 ```yaml
 reviewLimit: 2          # порог итераций REVIEW→FIX; после него в REVIEW идёт ## Q к HUMAN.CODER
+fixMode: item           # item (дефолт): отдельный FIX на замечание; bulk: один FIX на все
+fixReference: false     # при fixMode: item — подавать кодеру справку (предыдущие пункты + ответы)
 
 roles:
   AI.ANALYST:
@@ -124,18 +130,18 @@ roles:
 
 API:
 
-- `parseSpec(text)` — YAML → `TFdSpecConfig` (форма полей не валидируется);
+- `parseSpec(text)` — YAML → `TFdSpecConfig`; неизвестный ключ верхнего уровня и неверный тип скалярных полей (`reviewLimit`/`fixMode`/`fixReference`) бросают — диапазоны и вложенные role-спеки проверяет `validateSpec`;
 - `readSpec(path)` — прочитать `fd.spec.yaml`;
-- `validateSpec(config)` — `TFdSpecError[]`: нотация роли (`KIND.FUNC[.INSTANCE]`, 2–3 сегмента), типы полей, `reviewLimit` (целое ≥ 0);
+- `validateSpec(config)` — `TFdSpecError[]`: нотация роли (`KIND.FUNC[.INSTANCE]`, 2–3 сегмента), типы полей, `reviewLimit` (целое ≥ 0), `fixMode` (`bulk`|`item`), `budget.maxTurns` (целое ≥ 1);
 - `resolveRole(config, role)` — резолв оси с наследованием: `AI.CODER.SENIOR` наследует `tools`/`rights`/`budget`/`context` от `AI.CODER` и перекрывает `model`; массивы заменяются целиком, не конкатенируются.
 
-Поля роли: `model` (модель), `tools` (матрица MCP «роль → инструменты»), `rights` (что можно: read-only, DDL-виды, vault), `budget` (лимиты), `context` (SPEC-биндинги). Все опциональны; `reviewLimit` не задан → гейт `## Q` выключен.
+Поля роли: `model` (модель), `tools` (матрица MCP «роль → инструменты»), `rights` (что можно: read-only, DDL-виды, vault), `budget` (лимиты, в т.ч. `maxTurns` — лимит tool-calling ходов), `context` (SPEC-биндинги). Все опциональны; `reviewLimit` не задан → гейт `## Q` выключен; `fixMode` не задан → `item` (дефолт в драйвере, парсер копирует поле только если задано).
 
 ### Оркестратор (`orchestrator.ts`)
 
 Детерминированное ядро runtime-планирования: читает журнал как состояние (открытые дуги) и говорит, кто ходит следующим и с какими осями. LLM/MCP-исполнение ролей — снаружи, здесь только планирование.
 
-- `openArcs(content)` — состояние: топики с `fd-to`, не закрытые ни одним `fd-reply` (внутри файла). Закрытие — по адресу `L1#L2#L3`.
+- `openArcs(content)` — состояние: топики с `fd-to`, не закрытые ни одним `fd-reply` (внутри файла), в порядке появления и НЕ считая всё до последнего рулевого `ISSUE` от `HUMAN.*` (`steeringCutoff`). Закрытие — по адресу `L1#L2#L3`.
 - `nextStep(content)` — следующий ход: HUMAN-дуги приоритетнее (гибридный гейт — пока человек не ответил, AI не приступает), иначе первая AI-дуга. Рекомендуемый раздел: `ISSUE→CODE/REVIEW`, `CODE/FIX→REVIEW`, `REVIEW→FIX`, `QUESTIONS→ANSWERS`; `ISSUE→AI.ANALYST` — `null` (аналитик решает сам).
 - `gateDue(content, spec)` — нужен ли `## Q` в следующем `REVIEW`: число REVIEW-итераций достигло `spec.reviewLimit` (без порога — выключен).
 - `roleBrief(spec, role, content)` — поручение роли: оси (резолв с наследованием), SPEC-биндинги `context`, `fd-vault` из адресованных `ISSUE`, открытые дуги этой роли.
@@ -156,7 +162,7 @@ API:
 ## Разработка
 
 ```sh
-npm install        # ставит flowdini-spec из npm (^0.4.1)
+npm install        # ставит flowdini-spec из npm (^0.4.5)
 npm test
 npm run build
 npm run test:smoke
