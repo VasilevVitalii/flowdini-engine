@@ -17,7 +17,7 @@ export interface TFdRoleSpec {
 
 /** Контракт исполнения проекта (один на проект). */
 export interface TFdSpecConfig {
-  /** Порог итераций REVIEW→FIX: после него в `REVIEW` первым идёт `## Q` к HUMAN.CODER. Не задан — гейт выключен. */
+  /** Порог итераций REVIEW→FIX: после него в `REVIEW` первым идёт `## Q` к HUMAN.CODER. `0` — гейт с первого REVIEW. Не задан — гейт выключен. */
   reviewLimit?: number;
   /** Режим обработки замечаний REVIEW: `item` — отдельный FIX-раздел на каждое замечание (заголовок и свойства формирует хост; по умолчанию); `bulk` — один FIX на все замечания (заголовки и свойства пишет модель). */
   fixMode?: 'bulk' | 'item';
@@ -122,7 +122,25 @@ export function parseSpec(text: string): TFdSpecConfig {
   if (typeof roles !== 'object' || roles === null || Array.isArray(roles)) {
     throw new Error('SPEC: roles должен быть объектом');
   }
-  const config: TFdSpecConfig = { roles: roles as Record<string, TFdRoleSpec> };
+  // Структурные типы role-спеков проверяем до каста (невалидный YAML не должен
+  // пройти через `as TFdRoleSpec`); семантику полей оставляем `validateSpec`.
+  const config: TFdSpecConfig = { roles: {} };
+  for (const [role, spec] of Object.entries(roles as Record<string, unknown>)) {
+    if (spec === null || spec === undefined || typeof spec !== 'object' || Array.isArray(spec)) {
+      throw new Error(`SPEC: roles.${role} должен быть объектом (mapping)`);
+    }
+    const s = spec as Record<string, unknown>;
+    if (s.model !== undefined && typeof s.model !== 'string') {
+      throw new Error(`SPEC: roles.${role}.model должен быть строкой`);
+    }
+    for (const key of ['tools', 'context', 'vault'] as const) {
+      const v = s[key];
+      if (v !== undefined && (!Array.isArray(v) || v.some((t) => typeof t !== 'string'))) {
+        throw new Error(`SPEC: roles.${role}.${key} должен быть массивом строк`);
+      }
+    }
+    config.roles[role] = spec as TFdRoleSpec;
+  }
   if (obj.reviewLimit !== undefined) {
     if (typeof obj.reviewLimit !== 'number') {
       throw new Error(`SPEC: reviewLimit должен быть числом, получено ${JSON.stringify(obj.reviewLimit)}`);

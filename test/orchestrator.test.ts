@@ -415,6 +415,11 @@ describe('gateDue', () => {
   it('без reviewLimit → false', () => {
     expect(gateDue(contentOf(twoReviews), parseSpec('roles: {}\n'))).toBe(false);
   });
+
+  it('reviewLimit: 0 — гейт с первого REVIEW (порог 0 достигнут всегда)', () => {
+    expect(gateDue(contentOf(twoReviews), parseSpec('reviewLimit: 0\nroles: {}\n'))).toBe(true);
+    expect(gateDue(contentOf(''), parseSpec('reviewLimit: 0\nroles: {}\n'))).toBe(true);
+  });
 });
 
 describe('roleBrief', () => {

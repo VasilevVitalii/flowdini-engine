@@ -48,11 +48,11 @@ export function extractLinks(text: string): string[] {
 /**
  * Распарсить содержимое `[[...]]` (без скобок): `#L1#L2` → `{ filePath: '', parts: ['L1','L2'] }`,
  * `file#L1#L2` → `{ filePath: 'file', parts: ['L1','L2'] }`. Ссылку без `#` (на файл целиком)
- * возвращает `null` — она не адрес заголовка.
+ * возвращает `{ filePath: raw, parts: [] }` — адрес заголовка пуст, проверяется существование файла.
  */
 export function parseAddr(raw: string): TFdAddr | null {
   const hash = raw.indexOf('#');
-  if (hash === -1) return null;
+  if (hash === -1) return { filePath: raw, parts: [] };
   return {
     filePath: raw.slice(0, hash),
     parts: raw.slice(hash + 1).split('#'),
@@ -80,6 +80,8 @@ export function buildIndex(files: { filePath: string; content: TFdContent }[]): 
 export function makeResolver(index: TFdIndex): (filePath: string, addr: string) => boolean {
   return (filePath, addr) => {
     const addrs = index.get(filePath);
-    return addrs !== undefined && addrs.has(addr);
+    if (addrs === undefined) return false;
+    if (addr === '') return true; // ссылка на файл целиком — достаточно существования файла
+    return addrs.has(addr);
   };
 }

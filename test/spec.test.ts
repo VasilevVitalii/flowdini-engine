@@ -41,6 +41,18 @@ describe('parseSpec', () => {
     expect(() => parseSpec('fixMode: true\nroles: {}\n')).toThrow(/fixMode/);
     expect(() => parseSpec('fixReference: "yes"\nroles: {}\n')).toThrow(/fixReference/);
   });
+
+  it('роль без значения (null) — parseSpec бросает (структурная проверка до каста)', () => {
+    expect(() => parseSpec('roles:\n  AI.CODER:\n')).toThrow('roles.AI.CODER должен быть объектом');
+  });
+
+  it('model не строка — parseSpec бросает', () => {
+    expect(() => parseSpec('roles:\n  AI.CODER:\n    model: 42\n')).toThrow('roles.AI.CODER.model должен быть строкой');
+  });
+
+  it('tools не массив строк — parseSpec бросает', () => {
+    expect(() => parseSpec('roles:\n  AI.CODER:\n    tools: [1]\n')).toThrow('roles.AI.CODER.tools должен быть массивом строк');
+  });
 });
 
 describe('validateSpec', () => {
@@ -70,13 +82,6 @@ describe('validateSpec', () => {
   it('budget.maxTurns не целое — ошибка', () => {
     const errs = validateSpec({ roles: { 'AI.CODER': { budget: { maxTurns: 'many' } } } });
     expect(errs).toEqual([{ path: 'roles.AI.CODER.budget.maxTurns', error: 'must be a positive integer' }]);
-  });
-
-  it('роль без значения (null) — ошибка валидации, не TypeError', () => {
-    const errs = validateSpec(parseSpec('roles:\n  AI.CODER:\n'));
-    expect(errs).toEqual([
-      { path: 'roles.AI.CODER', error: 'must be an object (mapping), not null' },
-    ]);
   });
 });
 

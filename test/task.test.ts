@@ -116,6 +116,25 @@ chat.md: broken link: "[[#ISSUE 9]]"
     ]);
   });
 
+  it('битая ссылка в преамбуле (тексте до первого заголовка)', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), 'преамбула со ссылкой [[ghost#D 1]]\n\n# Q 1\n\n## Q 1\nbody\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'broken link: "[[ghost#D 1]]"' },
+    ]);
+  });
+
+  it('ссылка на файл целиком без `#`: существующий — чисто, отсутствующий — битая', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# Q 1\n\n## Q 1\n[fd-reply:: [[b]]]\nbody\n');
+    await writeFile(join(dir, 'b.md'), '# D 1\n\nbody\n');
+    expect(await taskCheck(dir)).toEqual([]);
+    await rm(join(dir, 'b.md'));
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'broken link: "[[b]]"' },
+    ]);
+  });
+
   it('ссылка на отсутствующий файл', async () => {
     const dir = await tmp();
     await writeFile(join(dir, 'a.md'), '# Q 1\n\n## Q 1\n[fd-reply:: [[ghost#D 1]]]\nbody\n');
@@ -187,8 +206,24 @@ describe('taskCheck: терминальность DONE', () => {
 
   it('ISSUE после DONE (переоткрытие) — допустимо', async () => {
     const dir = await tmp();
-    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# ISSUE 2\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nreopen\n');
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# ISSUE 2\n[fd-from:: HUMAN.ANALYST]\n[fd-to:: AI.ANALYST]\n\nreopen\n');
     expect(await taskCheck(dir)).toEqual([]);
+  });
+
+  it('ISSUE после DONE от не-HUMAN — ошибка переоткрытия', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n[fd-from:: HUMAN.ANALYST]\n\nclosed\n\n# ISSUE 2\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nreopen\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'non-HUMAN reopen after DONE: "ISSUE 2"' },
+    ]);
+  });
+
+  it('DONE без fd-from — ошибка', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'a.md'), '# DONE 1\n\nclosed\n');
+    expect(await taskCheck(dir)).toEqual([
+      { relativeFileName: 'a.md', error: 'DONE must have fd-from' },
+    ]);
   });
 
   it('DONE от не-HUMAN — ошибка', async () => {

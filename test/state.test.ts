@@ -111,6 +111,36 @@ describe('reviewFixIterations', () => {
     ].join('\n');
     expect(reviewFixIterations(s(j))).toBe(0);
   });
+
+  it('FIX-ответ на контейнер REVIEW (без подзаголовка) не засчитывается — 0', () => {
+    const j = [
+      '# ISSUE 1', '', 'b', '',
+      '# REVIEW 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug', '',
+      '# FIX 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.CODER.SENIOR] [fd-to:: AI.REVIEWER] [fd-reply:: [[#REVIEW 1]]]',
+      '', 'fixed',
+    ].join('\n');
+    expect(reviewFixIterations(s(j))).toBe(0);
+  });
+
+  it('FIX-ответ, стоящий ДО REVIEW, не засчитывается — 0', () => {
+    const j = [
+      '# ISSUE 1', '', 'b', '',
+      '# FIX 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.CODER.SENIOR] [fd-to:: AI.REVIEWER] [fd-reply:: [[#REVIEW 1#BUG 1]]]',
+      '', 'fixed', '',
+      '# REVIEW 1', '',
+      '## BUG 1',
+      '[fd-from:: AI.REVIEWER] [fd-to:: AI.CODER] [fd-reply:: [[#CODE 1]]]',
+      '', 'bug',
+    ].join('\n');
+    expect(reviewFixIterations(s(j))).toBe(0);
+  });
 });
 
 describe('isDone', () => {

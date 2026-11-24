@@ -54,29 +54,35 @@ export function sections(content: TFdContent): TFdSection[] {
 /**
  * Число завершённых итераций REVIEW→FIX с последнего прерывания
  * (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают счётчик). Итерация = REVIEW, на который
- * есть хотя бы один FIX-ответ (`fd-reply` на подзаголовок этого REVIEW).
+ * есть FIX-ответ, стоящий ПОСЛЕ него в документе и ссылающийся на его ПОДЗАГОЛОВОК
+ * (`REVIEW N#BUG k`), а не на контейнер. Автора не проверяем — `fd-from` ставит хост.
  * Считаем по REVIEW, а не по FIX, чтобы `fixMode: item` (несколько FIX на один
  * REVIEW) не завышал порог: цикл «REVIEW → все его фиксы» — одна итерация.
- * Одинокий REVIEW без FIX счётчик не двигает.
+ * Одинокий REVIEW без FIX (или FIX только на контейнер, или FIX до REVIEW) счётчик не двигает.
  * Производное состояние журнала: порог — настройка SPEC, счётчик в md не хранится.
  */
 export function reviewFixIterations(content: TFdContent): number {
-  // REVIEW-разделы, на которые ответил FIX (по fd-reply в подзаголовках FIX).
-  const answered = new Set<string>();
-  for (const item of content.itemList) {
-    if (item.topic.level1 === null || item.topic.level1.title !== 'FIX') continue;
-    if (item.topic.level2 !== null && item.topic.level2.title === 'A') continue; // ## A — ответ человека на Q, не FIX-итерация
+  // `answered`: ключ REVIEW (L1) → минимальный индекс FIX-ответа на его подзаголовок.
+  const answered = new Map<string, number>();
+  content.itemList.forEach((item, i) => {
+    if (item.topic.level1 === null || item.topic.level1.title !== 'FIX') return;
+    if (item.topic.level2 !== null && item.topic.level2.title === 'A') return; // ## A — ответ человека на Q, не FIX-итерация
     for (const v of topicFields(item.topic, 'fd-reply')) {
       for (const raw of extractLinks(v)) {
         const p = parseAddr(raw);
-        if (p === null || p.filePath !== '' || p.parts.length === 0) continue;
+        if (p === null || p.filePath !== '' || p.parts.length < 2) continue;
         const [title] = p.parts[0].split(' ');
-        if (title === 'REVIEW') answered.add(p.parts[0]);
+        if (title !== 'REVIEW') continue;
+        if (!answered.has(p.parts[0])) answered.set(p.parts[0], i);
       }
     }
-  }
+  });
   let count = 0;
-  for (const l1 of level1List(content)) {
+  const seen = new Set<string>();
+  content.itemList.forEach((item, i) => {
+    const l1 = item.topic.level1;
+    if (l1 === null) return;
+    const key = `${l1.title} ${l1.idx}`;
     switch (l1.title) {
       case 'ISSUE':
       case 'QUESTIONS':
@@ -84,10 +90,12 @@ export function reviewFixIterations(content: TFdContent): number {
         count = 0;
         break;
       case 'REVIEW':
-        if (answered.has(`${l1.title} ${l1.idx}`)) count += 1;
+        if (seen.has(key)) break;
+        seen.add(key);
+        if ((answered.get(key) ?? -1) > i) count += 1;
         break;
     }
-  }
+  });
   return count;
 }
 

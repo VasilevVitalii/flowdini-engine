@@ -121,24 +121,27 @@ function checkContent(
     if (addr !== '') validAddrs.add(addr);
   }
 
-  // Битые ссылки: из полей (преамбула + топики) и тел.
+  // Битые ссылки: из полей (преамбула + топики) и тел. Дубли дедуплицируются.
+  const broken = new Set<string>();
   const collect = (text: string): void => {
     for (const raw of extractLinks(text)) {
       const parsed = parseAddr(raw);
       if (parsed === null) continue;
       const addr = parsed.parts.join('#');
       if (parsed.filePath === '') {
-        if (!validAddrs.has(addr)) errors.push(`broken link: "[[${raw}]]"`);
+        if (!validAddrs.has(addr)) broken.add(`broken link: "[[${raw}]]"`);
       } else if (!resolveExternal(parsed.filePath, addr)) {
-        errors.push(`broken link: "[[${raw}]]"`);
+        broken.add(`broken link: "[[${raw}]]"`);
       }
     }
   };
   for (const field of content.inlineList) for (const v of field.valueList) collect(v);
+  if (content.text !== null) collect(stripFences(content.text));
   for (const item of content.itemList) {
     for (const field of item.topic.inlineList) for (const v of field.valueList) collect(v);
     if (item.text !== null) collect(stripFences(item.text));
   }
+  errors.push(...broken);
 
   // Терминальность DONE: `# DONE n` — последний L1-раздел; за ним допустимо
   // только переоткрытие `# ISSUE n`. DONE создаёт человек (fd-from = HUMAN.*),
@@ -147,8 +150,22 @@ function checkContent(
   for (let i = 0; i < l1s.length; i++) {
     if (l1s[i].title !== 'DONE') continue;
     for (let j = i + 1; j < l1s.length; j++) {
-      if (l1s[j].title === 'ISSUE') break; // переоткрытие — дальше новая задача
-      errors.push(`section after DONE: "${levelText(l1s[j])}"`);
+      if (l1s[j].title !== 'ISSUE') {
+        errors.push(`section after DONE: "${levelText(l1s[j])}"`);
+        continue;
+      }
+      // Переоткрытие после DONE — только ISSUE с fd-from, покрываемым HUMAN.
+      const reopenFrom: string[] = [];
+      for (const item of content.itemList) {
+        const t = item.topic;
+        if (t.level1 !== null && t.level1.title === l1s[j].title && t.level1.idx === l1s[j].idx && t.level2 === null) {
+          reopenFrom.push(...topicFields(t, 'fd-from'));
+        }
+      }
+      if (!reopenFrom.some((r) => roleCovers('HUMAN', r))) {
+        errors.push(`non-HUMAN reopen after DONE: "${levelText(l1s[j])}"`);
+      }
+      break; // переоткрытие — дальше новая задача
     }
   }
   for (const item of content.itemList) {
@@ -156,8 +173,12 @@ function checkContent(
     if (l1 === null || l1.title !== 'DONE' || item.topic.level2 !== null) continue;
     const fromVals = topicFields(item.topic, 'fd-from');
     const toVals = topicFields(item.topic, 'fd-to');
-    for (const v of fromVals) {
-      if (!roleCovers('HUMAN', v)) errors.push(`DONE fd-from must be HUMAN.*: "${v}"`);
+    if (fromVals.length === 0) {
+      errors.push('DONE must have fd-from');
+    } else {
+      for (const v of fromVals) {
+        if (!roleCovers('HUMAN', v)) errors.push(`DONE fd-from must be HUMAN.*: "${v}"`);
+      }
     }
     if (toVals.length > 0) errors.push('DONE must not have fd-to');
   }

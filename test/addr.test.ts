@@ -14,8 +14,8 @@ describe('parseAddr', () => {
     });
   });
 
-  it('без `#` — null', () => {
-    expect(parseAddr('example1')).toBeNull();
+  it('без `#` — ссылка на файл целиком (пустой адрес)', () => {
+    expect(parseAddr('example1')).toEqual({ filePath: 'example1', parts: [] });
   });
 
   it('пустые компоненты сохраняются (двойной `#` не маскируется)', () => {
@@ -57,5 +57,11 @@ describe('buildIndex + makeResolver', () => {
     const resolveExternal = makeResolver(buildIndex(files));
     expect(resolveExternal('a', 'CODE 1#C 9')).toBe(false);
     expect(resolveExternal('missing', 'CODE 1')).toBe(false);
+  });
+
+  it('ссылка на файл целиком (пустой адрес) — достаточно существования файла', () => {
+    const resolveExternal = makeResolver(buildIndex(files));
+    expect(resolveExternal('a', '')).toBe(true);
+    expect(resolveExternal('missing', '')).toBe(false);
   });
 });

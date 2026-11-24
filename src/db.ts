@@ -9,21 +9,22 @@ export type TFdDbObjectKind = 'procedure' | 'function' | 'view';
 export interface TFdDbObject {
   /** obj-path (schema.name) — ключ объекта, объявленный в `OBJECT`. */
   objPath: string;
-  /** Тип объекта: `procedure` | `function` | `view` (кодер правит только их). */
-  objKind: TFdDbObjectKind;
-  /** Действие: `create` (объекта ещё нет) или `edit` (уже есть). */
-  objAction: 'create' | 'edit';
+  /** Тип объекта: `procedure` | `function` | `view` (кодер правит только их). Валидируется в `validateDbObject`. */
+  objKind: string;
+  /** Действие: `create` (объекта ещё нет) или `edit` (уже есть). Валидируется в `validateDbObject`. */
+  objAction: string;
 }
 
 /**
  * Факт о существовании и типе объекта в БД (результат MCP-агента).
- * Дискриминант `exists`: существующий объект всегда имеет определённый `kind`,
- * иначе `edit` проходил бы сверку без подтверждения типа.
+ * Адаптер нетипизирован: `exists: true` может прийти с `kind: null` (тип не
+ * определили), а `exists: null` — с причиной (напр. расхождение префикса БД).
+ * Эти случаи `validateDbObject` превращает в ошибки, а не в исключения.
  */
 export type TFdDbFact =
-  | { exists: true; kind: TFdDbObjectKind }
+  | { exists: true; kind: TFdDbObjectKind | null }
   | { exists: false; kind: null }
-  | { exists: null; kind: null };
+  | { exists: null; kind: null; reason?: string };
 
 /** Запрос факта БД по obj-path. Реализует MCP-агент через `vv-db-mcp` (ядро в БД не ходит). */
 export type TFdDbLookup = (objPath: string) => Promise<TFdDbFact>;
@@ -54,9 +55,8 @@ export function extractDbObjects(content: TFdContent): TFdDbObject[] {
     const objKind = topicFields(item.topic, 'obj-kind')[0];
     const objAction = topicFields(item.topic, 'obj-action')[0];
     if (objPaths.length === 0 || objKind === undefined || objAction === undefined) continue;
-    if (objAction !== 'create' && objAction !== 'edit') continue; // невалидный action ловит taskCheck
     for (const objPath of objPaths) {
-      objects.push({ objPath, objKind: objKind as TFdDbObjectKind, objAction });
+      objects.push({ objPath, objKind, objAction });
     }
   }
   return objects;
@@ -79,15 +79,39 @@ export async function validateDbObject(
       errors.push({ objPath: obj.objPath, error: `invalid obj-kind: "${obj.objKind}"` });
       continue;
     }
-    const fact = await lookup(obj.objPath);
+    if (obj.objAction !== 'create' && obj.objAction !== 'edit') {
+      errors.push({ objPath: obj.objPath, error: `invalid obj-action: "${obj.objAction}"` });
+      continue;
+    }
+    // Lookup может бросить (недоверенный адаптер) — превращаем исключение в ошибку,
+    // а не даём ему уронить весь run().
+    let fact: TFdDbFact;
+    try {
+      fact = await lookup(obj.objPath);
+    } catch (e) {
+      errors.push({
+        objPath: obj.objPath,
+        error: `lookup failed: ${String((e as { message?: unknown })?.message ?? e)}`,
+      });
+      continue;
+    }
     if (fact.exists === null) {
-      errors.push({ objPath: obj.objPath, error: `cannot verify existence: "${obj.objPath}"` });
+      errors.push({
+        objPath: obj.objPath,
+        error: fact.reason !== undefined
+          ? `cannot verify existence: ${fact.reason}`
+          : `cannot verify existence: "${obj.objPath}"`,
+      });
       continue;
     }
     if (fact.exists) {
+      if (fact.kind === null) {
+        errors.push({ objPath: obj.objPath, error: `exists but kind unknown: "${obj.objPath}"` });
+        continue;
+      }
       if (obj.objAction === 'create') {
         errors.push({ objPath: obj.objPath, error: `object already exists: "${obj.objPath}"` });
-      } else if (fact.kind !== null && fact.kind.toLowerCase() !== obj.objKind.toLowerCase()) {
+      } else if (fact.kind.toLowerCase() !== obj.objKind.toLowerCase()) {
         errors.push({
           objPath: obj.objPath,
           error: `object kind mismatch: "${obj.objPath}" is "${fact.kind}", expected "${obj.objKind}"`,

@@ -2,7 +2,7 @@ import { textToStructure } from 'flowdini-spec';
 import type { TFdContent } from 'flowdini-spec';
 import { describe, expect, it } from 'vitest';
 import { collectSnapshot, extractDbObjects, validateDbObject } from '../src/db.js';
-import type { TFdDbFact, TFdDbObjectKind } from '../src/db.js';
+import type { TFdDbFact } from '../src/db.js';
 
 function contentOf(md: string): TFdContent {
   return textToStructure(md, true);
@@ -108,7 +108,7 @@ describe('validateDbObject', () => {
 
   it('невалидный obj-kind → ошибка без обращения к БД', async () => {
     const objects = [
-      { objPath: 'dbo.t_a', objKind: 'table' as unknown as TFdDbObjectKind, objAction: 'edit' as const },
+      { objPath: 'dbo.t_a', objKind: 'table', objAction: 'edit' },
     ];
     let called = false;
     const errors = await validateDbObject(objects, async () => {
@@ -117,6 +117,44 @@ describe('validateDbObject', () => {
     });
     expect(errors).toEqual([{ objPath: 'dbo.t_a', error: 'invalid obj-kind: "table"' }]);
     expect(called).toBe(false);
+  });
+
+  it('невалидный obj-action → ошибка без обращения к БД', async () => {
+    const objects = [{ objPath: 'dbo.f_a', objKind: 'function', objAction: 'drop' }];
+    let called = false;
+    const errors = await validateDbObject(objects, async () => {
+      called = true;
+      return { exists: false, kind: null };
+    });
+    expect(errors).toEqual([{ objPath: 'dbo.f_a', error: 'invalid obj-action: "drop"' }]);
+    expect(called).toBe(false);
+  });
+
+  it('exists:true с kind:null (тип не определили) → ошибка, не сверка', async () => {
+    const facts: Record<string, TFdDbFact> = { 'dbo.p_a': { exists: true, kind: null } };
+    const objects = [{ objPath: 'dbo.p_a', objKind: 'procedure', objAction: 'edit' }];
+    expect(await validateDbObject(objects, lookup(facts))).toEqual([
+      { objPath: 'dbo.p_a', error: 'exists but kind unknown: "dbo.p_a"' },
+    ]);
+  });
+
+  it('exists:null с причиной → ошибка с причиной', async () => {
+    const facts: Record<string, TFdDbFact> = {
+      'dbo.p_a': { exists: null, kind: null, reason: 'dbPrefix mismatch' },
+    };
+    const objects = [{ objPath: 'dbo.p_a', objKind: 'procedure', objAction: 'edit' }];
+    expect(await validateDbObject(objects, lookup(facts))).toEqual([
+      { objPath: 'dbo.p_a', error: 'cannot verify existence: dbPrefix mismatch' },
+    ]);
+  });
+
+  it('lookup бросает → ошибка, не исключение', async () => {
+    const objects = [{ objPath: 'dbo.p_a', objKind: 'procedure', objAction: 'edit' }];
+    expect(
+      await validateDbObject(objects, async () => {
+        throw new Error('connection lost');
+      }),
+    ).toEqual([{ objPath: 'dbo.p_a', error: 'lookup failed: connection lost' }]);
   });
 });
 

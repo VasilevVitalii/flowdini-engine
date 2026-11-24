@@ -18,10 +18,12 @@
 - `heading without number: "<title>"` — заголовок без числового суффикса (`idx === 0`); сообщается один раз на заголовок, а не на каждый подтопик;
 - `field on heading line: "<title>"` — inline-поле на строке заголовка (запрещено: свойства только отдельной строкой, иначе Obsidian не может сослаться на заголовок);
 - `orphan heading: "<level>"` — заголовок уровня 2/3 без родителя (неадресуем);
-- `broken link: "[[...]]"` — ссылка на несуществующий заголовок или файл; ссылки внутри fenced-блоков (примеры кода) не проверяются;
+- `broken link: "[[...]]"` — ссылка на несуществующий заголовок или файл; `[[file]]` без `#` — ссылка на файл целиком (проверяется существование файла). Проверяются преамбула (текст до первого заголовка), поля и тела; дубли ссылок схлопываются. Ссылки внутри fenced-блоков (примеры кода) не проверяются;
 - `multiple roles awaited: "<roles>"` — `fd-to` указывает несколько ролей, среди которых есть не-`HUMAN.*` (несколько `HUMAN.*` допустимо); проверяется только в свойствах (поля в заголовке запрещены);
 - `section after DONE: "<level>"` — за `# DONE n` идёт раздел, отличный от `# ISSUE n` (переоткрытие); `DONE` — терминальный;
+- `non-HUMAN reopen after DONE: "<level>"` — переоткрытие после `DONE` не от человека (допустим только `# ISSUE n` с `fd-from`, покрываемым `HUMAN.*`);
 - `DONE fd-from must be HUMAN.*: "<role>"` — `DONE` создаёт человек;
+- `DONE must have fd-from` — у `DONE` нет `fd-from`;
 - `DONE must not have fd-to` — у `DONE` нет адресата;
 - `invalid ISSUE transfer: "<from>" → "<to>"` — пара отправитель→адресат не из матрицы `ISSUE` (`AI.WRITER→AI.ANALYST`, `HUMAN.*→AI.ANALYST`, `AI.ANALYST→AI.CODER|AI.REVIEWER`);
 - `OBJECT incomplete: missing ... ("<level>")` — у `## OBJECT n` нет одного из `obj-kind`/`obj-action`/`obj-path`;
@@ -60,12 +62,13 @@ const errors = await taskCheck('/path/to/task', { exclude: ['issue-draft.md', 'i
 
 ### Роли
 
-Идентификатор роли — `PART1.PART2`:
+Идентификатор роли — `PART1.PART2[.PART3]` (2–3 сегмента):
 
 - `PART1` строго фиксирован: `AI` (модель), `HUMAN` (человек), `PROC` (внешний процесс);
-- `PART2` — уточнение роли, определяется в рамках конкретного SPEC.
+- `PART2` — уточнение роли, определяется в рамках конкретного SPEC;
+- `PART3` (опционален) — INSTANCE, перекрывающий FUNC наследованием по полям (см. `resolveRole`).
 
-Примеры: `AI.ARCHITECT`, `AI.CODER`, `HUMAN.CODER`, `HUMAN.ANALYST`, `PROC.TESTS`.
+Примеры: `AI.ARCHITECT`, `AI.CODER`, `AI.CODER.SENIOR`, `HUMAN.CODER`, `HUMAN.ANALYST`, `PROC.TESTS`.
 
 Роли задаются только через `fd-from`/`fd-to` (отдельного раздела объявления ролей нет). `fd-to` перечисляет роли, от которых ждём ответ: несколько `HUMAN.*` одновременно допустимо, любое другое сочетание нескольких ролей — ошибка `multiple roles awaited`.
 
@@ -79,7 +82,7 @@ const errors = await taskCheck('/path/to/task', { exclude: ['issue-draft.md', 'i
 
 - `level1List(content)` — заголовки уровня 1 в порядке появления;
 - `sections(content)` — секции уровня 1 с их подзаголовками уровня 2;
-- `reviewFixIterations(content)` — число `REVIEW`, на которые кодер ответил `FIX` (по `fd-reply` из `FIX`; `## A` — ответ человека на `Q`, не итерация), с последнего прерывания (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают). Порог итераций — настройка SPEC; движок лишь считает счётчик;
+- `reviewFixIterations(content)` — число завершённых итераций REVIEW→FIX с последнего прерывания (`ISSUE`/`QUESTIONS`/`DONE` сбрасывают). Итерация = REVIEW, на который кодер ответил FIX, стоящим ПОСЛЕ него и ссылающимся на его подзаголовок (`REVIEW N#BUG k`, не на контейнер); автора не проверяем (его ставит хост). `## A` — ответ человека на `Q`, не итерация. Порог итераций — настройка SPEC; движок лишь считает счётчик;
 - `isDone(content)` — таск завершён: последний раздел — `# DONE n`.
 - `isCrashed(content)` — в журнале есть `# CRASH n` (терминальный маркер аварии, процесс стоит);
 - `isAccept(text)` — тело ровно `+` после trim (детерминированный accept человека);
@@ -130,7 +133,7 @@ roles:
 
 API:
 
-- `parseSpec(text)` — YAML → `TFdSpecConfig`; неизвестный ключ верхнего уровня и неверный тип скалярных полей (`reviewLimit`/`fixMode`/`fixReference`) бросают — диапазоны и вложенные role-спеки проверяет `validateSpec`;
+- `parseSpec(text)` — YAML → `TFdSpecConfig`; неизвестный ключ верхнего уровня, неверный тип скалярных полей (`reviewLimit`/`fixMode`/`fixReference`) и структурно невалидные role-спеки (значение — объект; `model` — строка; `tools`/`context`/`vault` — массив строк) бросают до каста — диапазоны и семантику role-спеков проверяет `validateSpec`;
 - `readSpec(path)` — прочитать `fd.spec.yaml`;
 - `validateSpec(config)` — `TFdSpecError[]`: нотация роли (`KIND.FUNC[.INSTANCE]`, 2–3 сегмента), типы полей, `reviewLimit` (целое ≥ 0), `fixMode` (`bulk`|`item`), `budget.maxTurns` (целое ≥ 1);
 - `resolveRole(config, role)` — резолв оси с наследованием: `AI.CODER.SENIOR` наследует `tools`/`rights`/`budget`/`context` от `AI.CODER` и перекрывает `model`; массивы заменяются целиком, не конкатенируются.
@@ -141,7 +144,7 @@ API:
 
 Детерминированное ядро runtime-планирования: читает журнал как состояние (открытые дуги) и говорит, кто ходит следующим и с какими осями. LLM/MCP-исполнение ролей — снаружи, здесь только планирование.
 
-- `openArcs(content)` — состояние: топики с `fd-to`, не закрытые ни одним `fd-reply` (внутри файла), в порядке появления и НЕ считая всё до последнего рулевого `ISSUE` от `HUMAN.*` (`steeringCutoff`). Закрытие — по адресу `L1#L2#L3`.
+- `openArcs(content)` — состояние: топики с `fd-to`, не закрытые ни одним `fd-reply` (внутри файла), в причинном порядке (дуга закрывается ответом с `fd-reply` на адрес `L1#L2[#L3]`, стоящим позже в документе), НЕ считая всё до последнего рулевого `ISSUE` от `HUMAN.*` (`steeringCutoff`) и всё после `# DONE n` (задача закрыта — открытых дуг нет). Автор дуги — `fd-from` топика.
 - `nextStep(content)` — следующий ход: HUMAN-дуги приоритетнее (гибридный гейт — пока человек не ответил, AI не приступает), иначе первая AI-дуга. Рекомендуемый раздел: `ISSUE→CODE/REVIEW`, `CODE/FIX→REVIEW`, `REVIEW→FIX`, `QUESTIONS→ANSWERS`; `ISSUE→AI.ANALYST` — `null` (аналитик решает сам).
 - `gateDue(content, spec)` — нужен ли `## Q` в следующем `REVIEW`: число REVIEW-итераций достигло `spec.reviewLimit` (без порога — выключен).
 - `roleBrief(spec, role, content)` — поручение роли: оси (резолв с наследованием), SPEC-биндинги `context`, `fd-vault` из адресованных `ISSUE`, открытые дуги этой роли.
@@ -153,16 +156,16 @@ API:
 Детерминированная сверка `OBJECT` с живой БД. Ядро в БД не ходит: факты существования/типа и текст определения передаёт MCP-агент (`vv-db-mcp`) через колбэки — так ядро остаётся тестируемым без сети.
 
 - `extractDbObjects(content)` — объекты из `## OBJECT`-топиков (`obj-path`/`obj-kind`/`obj-action`); неполные пропускаются (их ловит `taskCheck`).
-- `validateDbObject(objects, lookup)` — сверка против фактов БД: `obj-kind` ∈ {`procedure`,`function`,`view`}; `create` ⇒ объекта нет; `edit` ⇒ объект есть; тип в БД совпадает с `obj-kind`. Возвращает `TFdDbError[]` (`objPath` + `error`).
+- `validateDbObject(objects, lookup)` — сверка против фактов БД: `obj-kind` ∈ {`procedure`,`function`,`view`}, `obj-action` ∈ {`create`,`edit`}; `create` ⇒ объекта нет; `edit` ⇒ объект есть; тип в БД совпадает с `obj-kind`. Факт `exists: true` с `kind: null` (тип не определили) и `exists: null` с `reason` — ошибки, не исключения; исключение из `lookup` тоже превращается в `TFdDbError`. Возвращает `TFdDbError[]` (`objPath` + `error`).
 - `collectSnapshot(objects, getDefinition, { onError? })` — определения (`get_definition` MCP) → `TFdSnapshotObject[]` для `captureSnapshot`; `onError` ловит сбой (объект пропускается) вместо throw.
 - `mcpMatrix(spec)` (в `spec.ts`) — матрица «роль → инструменты» из `roles[*].tools` с наследованием `INSTANCE`→`FUNC`; роли без `tools` опускаются.
 
-Колбэки: `TFdDbLookup = (objPath) => Promise<{ exists, kind }>`, `TFdGetDefinition = (objPath) => Promise<string>`. Адаптер к `vv-db-mcp` (stdio) — вне ядра (gi-bridge); `get_definition` отдаёт `not_found` как ошибку инструмента — адаптер трактует её как `exists: false`, прочие ошибки — как «не удалось проверить» (не «есть/нет»).
+Колбэки: `TFdDbLookup = (objPath) => Promise<TFdDbFact>`, `TFdGetDefinition = (objPath) => Promise<string>`. `TFdDbFact` — `{ exists: true, kind }` (kind может быть `null`: тип не определили) | `{ exists: false, kind: null }` | `{ exists: null, kind: null, reason? }` (не удалось проверить, с причиной). Адаптер нетипизирован: его исключения `validateDbObject` ловит и превращает в ошибки.
 
 ## Разработка
 
 ```sh
-npm install        # ставит flowdini-spec из npm (^0.4.5)
+npm install        # ставит flowdini-spec из npm (^0.5.0)
 npm test
 npm run build
 npm run test:smoke
