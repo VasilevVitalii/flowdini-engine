@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -421,5 +421,24 @@ describe('taskCheck: exclude', () => {
     expect(without.some((e) => e.relativeFileName === 'knowledge-candidates.md')).toBe(true);
     const withExclude = await taskCheck(dir, { exclude: ['knowledge-candidates.md'] });
     expect(withExclude.some((e) => e.relativeFileName === 'knowledge-candidates.md')).toBe(false);
+  });
+
+  it('ссылка [[file]] на исключённый файл — не broken link (файл существует)', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'chat.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nсм. [[issue-dom]]\n');
+    await writeFile(join(dir, 'issue-dom.md'), 'сырьё (не fd-файл)\n');
+    expect(await taskCheck(dir, { exclude: ['issue-dom.md'] })).toEqual([]);
+  });
+
+  it('override подменяет chat.md при проверке (валидация кандидата до публикации)', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, 'chat.md'), '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n');
+    const candidate = '# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody\n\n# ISSUE 1\n[fd-from:: AI.WRITER]\n[fd-to:: AI.ANALYST]\n\nbody2\n';
+    expect(await taskCheck(dir, { override: { fileName: 'chat.md', text: candidate } })).toEqual([
+      { relativeFileName: 'chat.md', error: 'duplicate heading: "ISSUE 1"' },
+    ]);
+    const onDisk = await readFile(join(dir, 'chat.md'), 'utf8');
+    expect(onDisk).toContain('body\n');
+    expect(onDisk).not.toContain('body2');
   });
 });

@@ -20,6 +20,9 @@ export interface TFdTaskCheckOptions {
   exclude?: string[];
   /** Корень vault: если задан, файлы из `fd-vault` проверяются на существование. */
   vaultRoot?: string;
+  /** Подменить содержимое файла при проверке (напр. `chat.md`-кандидата ДО
+   *  публикации): этот текст используется вместо чтения с диска. */
+  override?: { fileName: string; text: string };
 }
 
 /**
@@ -33,15 +36,22 @@ export interface TFdTaskCheckOptions {
 export async function taskCheck(taskDir: string, opts: TFdTaskCheckOptions = {}): Promise<TFdTaskError[]> {
   const files = new FdTaskFile(taskDir);
   const exclude = opts.exclude ?? [];
-  const names = (await files.list()).filter((n) => !exclude.includes(n));
+  const allNames = await files.list();
+  const names = allNames.filter((n) => !exclude.includes(n));
 
   const loaded: { name: string; content: TFdContent }[] = [];
   for (const name of names) {
-    const text = await files.read(name);
+    const text = opts.override?.fileName === name ? opts.override.text : await files.read(name);
     loaded.push({ name, content: textToStructure(text, true) });
   }
 
   const index = buildIndex(loaded.map(({ name, content }) => ({ filePath: stripMd(name), content })));
+  // Исключённые файлы не проверяются как fd-файлы, но существуют в проекте:
+  // ссылка `[[file]]` без якоря (на файл целиком) не должна давать broken link
+  // (иначе рекомендованный `exclude: ['issue-dom.md']` ломает штатную `[[issue-dom]]`).
+  for (const name of allNames) {
+    if (exclude.includes(name)) index.set(stripMd(name), new Set());
+  }
   const resolveExternal = makeResolver(index);
 
   const result: TFdTaskError[] = [];
